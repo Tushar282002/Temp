@@ -10,47 +10,10 @@ createRoot(document.getElementById('root')!).render(
 );
 
 
-
-
-
-
-const express = require('express');
-const bodyParser = require('body-parser');
-const mysql = require('mysql2');
-
-const app = express();
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static('public')); // Serves form.html
-
-// DB connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'your_db_user',
-  password: 'your_db_password',
-  database: 'your_db_name'
-});
-
-// Insert time value
-app.post('/save', (req, res) => {
-  const { task_id, time } = req.body;
-  const sql = 'INSERT INTO task_time_log (task_id, time_value) VALUES (?, ?)';
-  db.execute(sql, [task_id, time], (err) => {
-    if (err) return res.send('Error: ' + err.message);
-    res.send('Saved successfully!');
-  });
-});
-
-// Start server
-app.listen(3000, () => {
-  console.log('Server running on http://localhost:3000');
-});
-
-
-
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Edit Time</title>
+  <title>Edit Task Time</title>
 </head>
 <body>
   <h2>Edit Time for Task ID: <span id="taskId"></span></h2>
@@ -69,3 +32,40 @@ app.listen(3000, () => {
   </script>
 </body>
 </html>
+
+
+
+  from flask import Flask, request, render_template
+import mysql.connector  # or use sqlite3 if needed
+
+app = Flask(__name__)
+
+# DB Config (MySQL)
+db_config = {
+    'host': 'localhost',
+    'user': 'your_user',
+    'password': 'your_password',
+    'database': 'your_db'
+}
+
+@app.route('/')
+def form():
+    return render_template('form.html')
+
+@app.route('/save', methods=['POST'])
+def save():
+    task_id = request.form['task_id']
+    time_value = request.form['time']
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    sql = "INSERT INTO task_time_log (task_id, time_value) VALUES (%s, %s)"
+    cursor.execute(sql, (task_id, time_value))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return f"<h3>Time saved for Task ID: {task_id}</h3>"
+
+if __name__ == '__main__':
+    app.run(port=5000)
