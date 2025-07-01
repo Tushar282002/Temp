@@ -13,7 +13,7 @@ createRoot(document.getElementById('root')!).render(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Edit Task Time</title>
+  <title>Edit Time</title>
 </head>
 <body>
   <h2>Edit Time for Task ID: <span id="taskId"></span></h2>
@@ -34,19 +34,10 @@ createRoot(document.getElementById('root')!).render(
 </html>
 
 
-
   from flask import Flask, request, render_template
-import mysql.connector  # or use sqlite3 if needed
+import mysql.connector  # or remove if not saving yet
 
 app = Flask(__name__)
-
-# DB Config (MySQL)
-db_config = {
-    'host': 'localhost',
-    'user': 'your_user',
-    'password': 'your_password',
-    'database': 'your_db'
-}
 
 @app.route('/')
 def form():
@@ -56,16 +47,7 @@ def form():
 def save():
     task_id = request.form['task_id']
     time_value = request.form['time']
-    
-    conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor()
-    sql = "INSERT INTO task_time_log (task_id, time_value) VALUES (%s, %s)"
-    cursor.execute(sql, (task_id, time_value))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
-    return f"<h3>Time saved for Task ID: {task_id}</h3>"
+    return f"<h3>Time saved for Task ID: {task_id} at {time_value}</h3>"
 
 if __name__ == '__main__':
     app.run(port=5000)
