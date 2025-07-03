@@ -1,0 +1,80 @@
+from flask import Flask, request, render_template_string
+from datetime import datetime
+
+app = Flask(__name__)
+
+# Updated HTML template with date & time inputs
+FORM_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Edit Task</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 400px;
+      margin: 40px auto;
+      background-color: #f9f9f9;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label, input {
+      display: block;
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Edit Task Time</h2>
+  <p><strong>Task ID:</strong> {{ task_id }}</p>
+  <p><strong>Assigned To:</strong> {{ user }}</p>
+
+  <form method="POST">
+    <label for="date">Date:</label>
+    <input type="date" name="date" value="{{ default_date }}" required>
+
+    <label for="time">Time:</label>
+    <input type="time" name="time" value="{{ default_time }}" required>
+
+    <button type="submit">Save</button>
+  </form>
+
+  {% if message %}
+    <p style="color: green; margin-top: 15px;">{{ message }}</p>
+  {% endif %}
+</body>
+</html>
+"""
+
+@app.route('/edit', methods=['GET', 'POST'])
+def edit():
+    task_id = request.args.get('task_id', 'N/A')
+    user = request.args.get('user', 'N/A')
+
+    # Get current system date and default time
+    now = datetime.now()
+    default_date = now.strftime('%Y-%m-%d')     # e.g. 2025-07-03
+    default_time = "00:00"                      # for 00H:00M
+
+    message = None
+    if request.method == 'POST':
+        date = request.form.get('date')
+        time = request.form.get('time')
+        message = f"Received Date: {date}, Time: {time} for Task ID {task_id} (not saved, DB part pending)."
+
+    return render_template_string(FORM_HTML, task_id=task_id, user=user, default_date=default_date, default_time=default_time, message=message)
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000)
