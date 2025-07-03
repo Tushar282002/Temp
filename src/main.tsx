@@ -9,6 +9,8 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>
 );
 
+http://your_server_ip:5000/edit?task_id=${__data.fields.task_id}&user=${__data.fields.username}
+
 from flask import Flask, request, render_template_string
 import mysql.connector
 
