@@ -3,18 +3,18 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Updated HTML template with date & time inputs
+# HTML template
 FORM_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Edit Task</title>
+  <title>Edit Task Time</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 400px;
+      max-width: 420px;
       margin: 40px auto;
-      background-color: #f9f9f9;
+      background-color: #f4f4f4;
       padding: 20px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -26,6 +26,11 @@ FORM_HTML = """
       padding: 8px;
       font-size: 14px;
     }
+    small {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 15px;
+    }
     button {
       padding: 10px 15px;
       background-color: #007bff;
@@ -33,11 +38,13 @@ FORM_HTML = """
       border: none;
       border-radius: 5px;
       font-size: 15px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <h2>Edit Task Time</h2>
+
   <p><strong>Task ID:</strong> {{ task_id }}</p>
   <p><strong>Assigned To:</strong> {{ user }}</p>
 
@@ -45,8 +52,9 @@ FORM_HTML = """
     <label for="date">Date:</label>
     <input type="date" name="date" value="{{ default_date }}" required>
 
-    <label for="time">Time:</label>
-    <input type="time" name="time" value="{{ default_time }}" required>
+    <label for="time">Time Spent (HH:MM):</label>
+    <input type="time" name="time" value="{{ default_time }}" min="00:00" max="12:00" required>
+    <small>Please enter the time you spent working on this task (e.g., 01:30 for 1 hour 30 minutes). Max allowed: 12 hours</small>
 
     <button type="submit">Save</button>
   </form>
@@ -63,16 +71,16 @@ def edit():
     task_id = request.args.get('task_id', 'N/A')
     user = request.args.get('user', 'N/A')
 
-    # Get current system date and default time
+    # Default values
     now = datetime.now()
-    default_date = now.strftime('%Y-%m-%d')     # e.g. 2025-07-03
-    default_time = "00:00"                      # for 00H:00M
+    default_date = now.strftime('%Y-%m-%d')
+    default_time = "00:00"
 
     message = None
     if request.method == 'POST':
         date = request.form.get('date')
         time = request.form.get('time')
-        message = f"Received Date: {date}, Time: {time} for Task ID {task_id} (not saved, DB part pending)."
+        message = f"Received Date: {date}, Time Spent: {time} for Task ID {task_id}. (Not saved, DB step pending.)"
 
     return render_template_string(FORM_HTML, task_id=task_id, user=user, default_date=default_date, default_time=default_time, message=message)
 
