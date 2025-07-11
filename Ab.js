@@ -1,13 +1,16 @@
-// Get the form object safely
 const form = context.form || {};
-const selectedType = form.task_type?.value;  // Use safe optional chaining
+const selectedType = form.task_type?.value;
 
-// Access query results safely
-const incidentNumbers = data.incident_query?.rows?.map(r => r.number) || [];
-const changeNumbers = data.change_query?.rows?.map(r => r.number) || [];
-const problemNumbers = data.problem_query?.rows?.map(r => r.number) || [];
+// Use context.data instead of data
+const incidentRows = context.data.incident?.rows || [];
+const changeRows = context.data.change?.rows || [];
+const problemRows = context.data.problem?.rows || [];
 
-// Initialize options
+// Map to 'number' values
+const incidentNumbers = incidentRows.map(r => r.number);
+const changeNumbers = changeRows.map(r => r.number);
+const problemNumbers = problemRows.map(r => r.number);
+
 let options = [];
 
 if (selectedType === 'Incident') {
@@ -20,7 +23,6 @@ if (selectedType === 'Incident') {
   options = [{ label: '-- No task numbers --', value: '' }];
 }
 
-// Set options only if the task_number field exists
 if (form.task_number) {
   form.task_number.options = options;
   form.task_number.disabled = options.length === 0;
