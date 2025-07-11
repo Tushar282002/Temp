@@ -1,29 +1,19 @@
+// Safe form and selected type
 const form = context.form || {};
 const selectedType = form.task_type?.value;
 
-// Use context.data instead of data
-const incidentRows = context.data.incident?.rows || [];
-const changeRows = context.data.change?.rows || [];
-const problemRows = context.data.problem?.rows || [];
+// Access query results using context.data (requires Ref IDs to be correct)
+const incident = context.data.incident?.rows || [];
+const change = context.data.change?.rows || [];
+const problem = context.data.problem?.rows || [];
 
-// Map to 'number' values
-const incidentNumbers = incidentRows.map(r => r.number);
-const changeNumbers = changeRows.map(r => r.number);
-const problemNumbers = problemRows.map(r => r.number);
-
-let options = [];
-
+// Build the options based on selected type
 if (selectedType === 'Incident') {
-  options = incidentNumbers.map(n => ({ label: n, value: n }));
+  return incident.map(r => ({ label: r.number, value: r.number }));
 } else if (selectedType === 'Change') {
-  options = changeNumbers.map(n => ({ label: n, value: n }));
+  return change.map(r => ({ label: r.number, value: r.number }));
 } else if (selectedType === 'Problem') {
-  options = problemNumbers.map(n => ({ label: n, value: n }));
+  return problem.map(r => ({ label: r.number, value: r.number }));
 } else {
-  options = [{ label: '-- No task numbers --', value: '' }];
-}
-
-if (form.task_number) {
-  form.task_number.options = options;
-  form.task_number.disabled = options.length === 0;
+  return [{ label: '-- Select valid task type first --', value: '' }];
 }
