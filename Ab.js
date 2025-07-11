@@ -1,10 +1,10 @@
 const form = context.form || {};
-const selectedType = form.task_type?.value;
+const selectedType = form?.task_type?.value || "";
 
-// Get query results safely
-const incidentRows = context.data.incident?.rows || [];
-const changeRows = context.data.change?.rows || [];
-const problemRows = context.data.problem?.rows || [];
+// Add fallback for query data
+const incidentRows = context.data?.A?.rows || [];
+const changeRows = context.data?.B?.rows || [];
+const problemRows = context.data?.C?.rows || [];
 
 if (selectedType === 'incident') {
   return incidentRows.map(r => ({ label: r.number, value: r.number }));
