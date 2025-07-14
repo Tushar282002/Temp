@@ -27,3 +27,33 @@ FROM (
 ) AS combined
 WHERE task_type = '${__form.task_type}'
 ORDER BY number
+
+
+
+const form = context.form || {};
+const selectedType = form?.task_type?.value || "";
+
+// Access hidden variables
+const incidentList = context.variables.incident_tasks?.options || [];
+const changeList = context.variables.change_tasks?.options || [];
+const problemList = context.variables.problem_tasks?.options || [];
+
+// Debug log
+console.log("Selected Type:", selectedType);
+console.log("Incident list:", incidentList);
+console.log("Change list:", changeList);
+console.log("Problem list:", problemList);
+
+// Helper to map variable options
+const mapFromVar = (options) =>
+  options.map(opt => ({ label: opt.text, value: opt.value }));
+
+if (selectedType === "incident") {
+  return mapFromVar(incidentList);
+} else if (selectedType === "change") {
+  return mapFromVar(changeList);
+} else if (selectedType === "problem") {
+  return mapFromVar(problemList);
+} else {
+  return [{ label: "-- No task numbers available --", value: "" }];
+}
