@@ -141,3 +141,68 @@ WHERE
   (LOWER('$type') = 'change' OR LOWER('$type') = 'all') 
   AND sc.number LIKE 'CHG%'
   AND mr."resourceEmail" = 'siddharth.singhania@asia.bnpparibas.com';
+
+
+
+
+
+
+
+
+
+
+SELECT 
+    si.number, 
+    si."short_description", 
+    si."assigned_to.name" AS username, 
+    CONCAT(
+        FLOOR(COALESCE((
+            SELECT SUM(ael.hours_spent) 
+            FROM pilothouse.aps_efforts_logging ael 
+            WHERE ael.task_id = si.number
+        ), 0) / 60)::TEXT, 'hr ',
+        MOD(COALESCE((
+            SELECT SUM(ael.hours_spent) 
+            FROM pilothouse.aps_efforts_logging ael 
+            WHERE ael.task_id = si.number
+        ), 0), 60)::TEXT, 'min'
+    ) AS "Total Hours"
+FROM pilothouse.sn_business_app sba
+JOIN pilothouse.sn_configuration_items sci ON sci.u_code = sba.u_code
+FULL JOIN pilothouse.apm_applications aa ON sba.goldenapp_auid = aa.goldenapp_auid
+JOIN pilothouse.sn_incidents si ON si.cmdb_ci_sys_id = sci.sys_id
+FULL JOIN pilothouse.apm_clusters ac ON aa.apm_cluster = ac.id
+FULL JOIN pilothouse.apm_subclusters as2 ON aa.apm_subcluster = as2.id
+WHERE LOWER(si."Stype") = 'incident' 
+  AND si."number" LIKE 'INC%'
+  AND ac.id IN ($ApmCluster)
+  AND as2.id IN ($ApmSubCluster)
+
+UNION
+
+SELECT 
+    sc.number, 
+    sc."short_description", 
+    sc."assigned_to.name" AS username, 
+    CONCAT(
+        FLOOR(COALESCE((
+            SELECT SUM(ael.hours_spent) 
+            FROM pilothouse.aps_efforts_logging ael 
+            WHERE ael.task_id = sc.number
+        ), 0) / 60)::TEXT, 'hr ',
+        MOD(COALESCE((
+            SELECT SUM(ael.hours_spent) 
+            FROM pilothouse.aps_efforts_logging ael 
+            WHERE ael.task_id = sc.number
+        ), 0), 60)::TEXT, 'min'
+    ) AS "Total Hours"
+FROM pilothouse.sn_business_app sba
+JOIN pilothouse.sn_configuration_items sci ON sci.u_code = sba.u_code
+FULL JOIN pilothouse.apm_applications aa ON sba.goldenapp_auid = aa.goldenapp_auid
+JOIN pilothouse.sn_changes sc ON sc.cmdb_ci_sys_id = sci.sys_id
+FULL JOIN pilothouse.apm_clusters ac ON aa.apm_cluster = ac.id
+FULL JOIN pilothouse.apm_subclusters as2 ON aa.apm_subcluster = as2.id
+WHERE LOWER(sc."Stype") = 'change' 
+  AND sc."number" LIKE 'CHG%'
+  AND ac.id IN ($ApmCluster)
+  AND as2.id IN ($ApmSubCluster)
