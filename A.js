@@ -38,15 +38,24 @@ WHERE LOWER('$type') = 'incident'
 
 
 
-SELECT si.*
+SELECT COUNT(si.number)
 FROM pilothouse.sn_incidents si
-JOIN pilothouse.sn_configuration_items sci ON si."cmdb_ci.sys_id" = sci.sys_id
-JOIN pilothouse.sn_business_apps sba ON sci.u_code = sba.u_code
-JOIN pilothouse.apm_application daps ON sba.goldenapp_auid = daps.goldenapp_auid
-JOIN pilothouse.apm_applications aa ON daps.apm_application = aa.id
-JOIN pilothouse.apm_clusters ac ON aa.apm_cluster = ac.id
-JOIN pilothouse.apm_subclusters as2 ON aa.apm_subcluster = as2.id
-WHERE si.state IN ('New', 'On Hold', 'In Progress')
-  AND ac.id IN ($ApmCluster)
-  AND as2.id IN ($ApmSubCluster)
-  AND sba.goldenapp_auid IN ($ApmApplication);
+LEFT JOIN pilothouse.sn_configuration_items sci ON si.cmdb_ci = sci.sys_id
+LEFT JOIN pilothouse.sn_business_apps sba ON sci.u_code = sba.u_code
+LEFT JOIN pilothouse.apm_application_daps aad ON sba.goldenapp_auid = aad.goldenapp_auid
+LEFT JOIN pilothouse.apm_applications aa ON aad.apm_application = aa.id
+LEFT JOIN pilothouse.apm_clusters ac ON aa.apm_cluster = ac.id
+LEFT JOIN pilothouse.apm_subclusters as2 ON aa.apm_subcluster = as2.id
+WHERE si.priority LIKE '1%'
+  AND (
+        ac.id IN ($ApmCluster)
+        OR $ApmCluster IS NULL
+      )
+  AND (
+        as2.id IN ($ApmSubCluster)
+        OR $ApmSubCluster IS NULL
+      )
+  AND (
+        sba.goldenapp_auid IN ($ApmApplication)
+        OR $ApmApplication IS NULL
+      );
