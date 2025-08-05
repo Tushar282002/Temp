@@ -206,3 +206,43 @@ WHERE LOWER(sc."Stype") = 'change'
   AND sc."number" LIKE 'CHG%'
   AND ac.id IN ($ApmCluster)
   AND as2.id IN ($ApmSubCluster)
+
+
+
+
+const jsonData = pm.response.json();
+
+const assignee = jsonData.fields.assignee || {};
+const reporter = jsonData.fields.reporter || {};
+
+const viewData = {
+    assigneeEmail: assignee.emailAddress || "Not Assigned",
+    assigneeName: assignee.displayName || "N/A",
+    reporterEmail: reporter.emailAddress || "Not Available",
+    reporterName: reporter.displayName || "N/A"
+};
+
+pm.visualizer.set(`
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 60%;
+    }
+    td, th {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      background-color: #f9f9f9;
+      text-align: left;
+    }
+  </style>
+  <h3>JIRA Issue Summary</h3>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Assignee Email</td><td>{{assigneeEmail}}</td></tr>
+    <tr><td>Assignee Name</td><td>{{assigneeName}}</td></tr>
+    <tr><td>Reporter Email</td><td>{{reporterEmail}}</td></tr>
+    <tr><td>Reporter Name</td><td>{{reporterName}}</td></tr>
+  </table>
+`, viewData);
