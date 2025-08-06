@@ -1,0 +1,119 @@
+
+login.html
+<div class="login-container">
+  <h2>Login</h2>
+  <form (ngSubmit)="onLogin()" #loginForm="ngForm">
+    <div>
+      <label>Email</label>
+      <input type="email" name="email" [(ngModel)]="email" required />
+    </div>
+    <div>
+      <label>Password</label>
+      <input type="password" name="password" [(ngModel)]="password" required />
+    </div>
+    <button type="submit" [disabled]="!loginForm.form.valid">Login</button>
+  </form>
+  <p *ngIf="errorMessage" style="color: red;">{{ errorMessage }}</p>
+</div>
+
+
+login.ts
+import { Component } from '@angular/core';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.css']
+})
+export class LoginComponent {
+  email: string = '';
+  password: string = '';
+  errorMessage: string = '';
+
+  constructor(private router: Router) {}
+
+  onLogin() {
+    // Dummy credentials
+    const validEmail = 'test@example.com';
+    const validPassword = '123456';
+
+    if (this.email === validEmail && this.password === validPassword) {
+      this.router.navigate(['/home']); // Navigate to home after successful login
+    } else {
+      this.errorMessage = 'Invalid email or password';
+    }
+  }
+}
+
+
+
+app-routing.module.ts
+
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { LoginComponent } from './login/login.component';
+import { HomeComponent } from './home/home.component';
+
+const routes: Routes = [
+  { path: '', component: LoginComponent },
+  { path: 'home', component: HomeComponent }
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule {}
+
+
+
+
+
+app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { FormsModule } from '@angular/forms';
+
+import { AppComponent } from './app.component';
+import { LoginComponent } from './login/login.component';
+import { HomeComponent } from './home/home.component';
+import { AppRoutingModule } from './app-routing.module';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    LoginComponent,
+    HomeComponent
+  ],
+  imports: [
+    BrowserModule,
+    FormsModule,
+    AppRoutingModule
+  ],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+
+
+
+
+login.css
+
+.login-container {
+  width: 300px;
+  margin: 100px auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+}
+input {
+  width: 100%;
+  padding: 8px;
+  margin: 10px 0;
+}
+button {
+  width: 100%;
+  padding: 10px;
+}
