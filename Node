@@ -165,3 +165,46 @@ export class ExcelPageComponent implements OnInit {
 <button (click)="addRow()">Add Row</button>
 <button (click)="addColumn()">Add Column</button>
 <button (click)="save()">Save Changes</button>
+
+
+
+
+
+
+
+<div style="max-width: 1100px; margin: 24px auto; padding: 12px;">
+  <h2>Excel Editor</h2>
+
+  <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0;">
+    <button (click)="addRow()" [disabled]="!columns.length">Add Row</button>
+    <button (click)="addColumn()" [disabled]="!columns.length">Add Column</button>
+    <button (click)="save()" [disabled]="!columns.length">Save Changes</button>
+  </div>
+
+  <div *ngIf="!columns.length" style="opacity: 0.8; margin-top: 8px;">
+    <em>No data loaded yet. Please check your backend connection.</em>
+  </div>
+
+  <div *ngIf="columns.length" style="overflow: auto; border: 1px solid #ddd; border-radius: 8px;">
+    <table style="width: 100%; border-collapse: collapse; min-width: 600px;">
+      <thead>
+        <tr>
+          <th *ngFor="let col of columns" style="text-align: left; padding: 8px; border-bottom: 1px solid #eee;">
+            {{ col }}
+          </th>
+          <th style="padding: 8px; border-bottom: 1px solid #eee;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of data; let i = index" style="border-top: 1px solid #f3f3f3;">
+          <td *ngFor="let col of columns" style="padding: 6px;">
+            <input [(ngModel)]="row[col]" style="width: 100%; box-sizing: border-box;" />
+          </td>
+          <td style="padding: 6px; white-space: nowrap;">
+            <button (click)="deleteRow(i)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
