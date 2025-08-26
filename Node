@@ -1,0 +1,167 @@
+mkdir backend
+cd backend
+npm init -y
+npm install express cors body-parser xlsx
+
+
+
+server.js
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const XLSX = require('xlsx');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+app.use(cors());
+app.use(bodyParser.json());
+
+const filePath = path.join(__dirname, 'data.xlsx');
+
+// Utility: read Excel file into JSON
+function readExcel() {
+  if (!fs.existsSync(filePath)) {
+    // Create file if not exists
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet([]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, filePath);
+  }
+  const workbook = XLSX.readFile(filePath);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+}
+
+// Utility: write JSON back to Excel
+function writeExcel(data) {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, filePath);
+}
+
+// GET → fetch data
+app.get('/api/data', (req, res) => {
+  const data = readExcel();
+  res.json(data);
+});
+
+// POST → update file with new data
+app.post('/api/data', (req, res) => {
+  const updatedData = req.body;
+  writeExcel(updatedData);
+  res.json({ message: 'Excel updated successfully!' });
+});
+
+app.listen(3000, () => console.log('✅ Backend running on http://localhost:3000'));
+
+
+
+
+httpclientmodule
+// app.config.ts or app.module.ts
+import { provideHttpClient } from '@angular/common/http';
+
+export const appConfig = {
+  providers: [provideHttpClient()]
+};
+
+
+
+
+
+
+excelpage component
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+
+@Component({
+  selector: 'app-excel-page',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './excel-page.component.html'
+})
+export class ExcelPageComponent implements OnInit {
+  data: any[] = [];
+  columns: string[] = [];
+
+  constructor(private http: HttpClient) {}
+
+  ngOnInit() {
+    this.loadData();
+  }
+
+  loadData() {
+    this.http.get<any[]>('http://localhost:3000/api/data').subscribe(res => {
+      this.data = res;
+      this.columns = this.extractColumns(res);
+    });
+  }
+
+  extractColumns(rows: any[]): string[] {
+    const set = new Set<string>();
+    rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
+    if (rows.length) {
+      const first = Object.keys(rows[0]);
+      const extras = [...set].filter(c => !first.includes(c));
+      return [...first, ...extras];
+    }
+    return [...set];
+  }
+
+  addRow() {
+    const newRow: any = {};
+    this.columns.forEach(c => newRow[c] = '');
+    this.data.push(newRow);
+  }
+
+  deleteRow(index: number) {
+    this.data.splice(index, 1);
+  }
+
+  addColumn() {
+    const colName = prompt('Enter new column name:');
+    if (colName && !this.columns.includes(colName)) {
+      this.columns.push(colName);
+      this.data.forEach(r => (r[colName] = r[colName] ?? ''));
+    }
+  }
+
+  save() {
+    this.http.post('http://localhost:3000/api/data', this.data).subscribe(() => {
+      alert('Excel updated successfully!');
+      this.loadData(); // reload after save
+    });
+  }
+}
+
+
+
+
+
+
+
+
+
+<table border="1">
+  <tr>
+    <th *ngFor="let col of columns">{{ col }}</th>
+    <th>Actions</th>
+  </tr>
+  <tr *ngFor="let row of data; let i = index">
+    <td *ngFor="let col of columns">
+      <input [(ngModel)]="row[col]" />
+    </td>
+    <td>
+      <button (click)="deleteRow(i)">Delete</button>
+    </td>
+  </tr>
+</table>
+
+<br>
+<button (click)="addRow()">Add Row</button>
+<button (click)="addColumn()">Add Column</button>
+<button (click)="save()">Save Changes</button>
