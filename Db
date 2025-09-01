@@ -1,0 +1,279 @@
+npm install express cors body-parser pg
+
+
+
+db.js
+// backend/db.js
+const { Pool } = require("pg");
+
+const pool = new Pool({
+  user: "your_pg_username",     // e.g., postgres
+  host: "localhost",
+  database: "your_db_name",     // e.g., mydb
+  password: "your_password",
+  port: 5432,
+});
+
+module.exports = pool;
+
+
+
+server.js
+// backend/server.js
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const pool = require("./db");
+
+const app = express();
+app.use(cors());
+app.use(bodyParser.json());
+
+// ✅ Get all data
+app.get("/api/data", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM your_table ORDER BY id ASC");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Insert new row
+app.post("/api/data", async (req, res) => {
+  try {
+    const { name, age } = req.body;  // Example columns
+    const result = await pool.query(
+      "INSERT INTO your_table (name, age) VALUES ($1, $2) RETURNING *",
+      [name, age]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Update row
+app.put("/api/data/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, age } = req.body;
+    const result = await pool.query(
+      "UPDATE your_table SET name = $1, age = $2 WHERE id = $3 RETURNING *",
+      [name, age, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Delete row
+app.delete("/api/data/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM your_table WHERE id = $1", [id]);
+    res.json({ message: "Row deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Start server
+app.listen(3000, () => {
+  console.log("Server running on http://localhost:3000");
+});
+
+
+
+
+
+data.services.ts
+// src/app/data.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+export interface Row {
+  id: number;
+  name: string;
+  age: number;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class DataService {
+  private apiUrl = 'http://localhost:3000/api/data';
+
+  constructor(private http: HttpClient) {}
+
+  getData(): Observable<Row[]> {
+    return this.http.get<Row[]>(this.apiUrl);
+  }
+
+  addRow(row: Partial<Row>): Observable<Row> {
+    return this.http.post<Row>(this.apiUrl, row);
+  }
+
+  updateRow(id: number, row: Partial<Row>): Observable<Row> {
+    return this.http.put<Row>(`${this.apiUrl}/${id}`, row);
+  }
+
+  deleteRow(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/${id}`);
+  }
+}
+
+
+
+
+
+
+db.table.xomponent.ts
+import { Component, OnInit } from '@angular/core';
+import { DataService, Row } from '../data.service';
+
+@Component({
+  selector: 'app-db-table',
+  templateUrl: './db-table.component.html',
+  styleUrls: ['./db-table.component.css']
+})
+export class DbTableComponent implements OnInit {
+  data: Row[] = [];
+  newRow: Partial<Row> = { name: '', age: 0 };
+
+  constructor(private dataService: DataService) {}
+
+  ngOnInit() {
+    this.loadData();
+  }
+
+  loadData() {
+    this.dataService.getData().subscribe(res => this.data = res);
+  }
+
+  addRow() {
+    this.dataService.addRow(this.newRow).subscribe(() => {
+      this.loadData();
+      this.newRow = { name: '', age: 0 };
+    });
+  }
+
+  updateRow(row: Row) {
+    this.dataService.updateRow(row.id, row).subscribe(() => {
+      this.loadData();
+    });
+  }
+
+  deleteRow(id: number) {
+    this.dataService.deleteRow(id).subscribe(() => {
+      this.loadData();
+    });
+  }
+}
+
+
+
+
+
+
+db-table.compoent.html
+<div class="container">
+  <h2>PostgreSQL Data</h2>
+
+  <table border="1" cellpadding="8">
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Age</th>
+      <th>Actions</th>
+    </tr>
+
+    <tr *ngFor="let row of data">
+      <td>{{ row.id }}</td>
+      <td><input [(ngModel)]="row.name"></td>
+      <td><input [(ngModel)]="row.age" type="number"></td>
+      <td>
+        <button (click)="updateRow(row)">Update</button>
+        <button (click)="deleteRow(row.id)">Delete</button>
+      </td>
+    </tr>
+
+    <tr>
+      <td>New</td>
+      <td><input [(ngModel)]="newRow.name"></td>
+      <td><input [(ngModel)]="newRow.age" type="number"></td>
+      <td><button (click)="addRow()">Add</button></td>
+    </tr>
+  </table>
+</div>
+
+
+
+
+
+
+
+crudRoutes.js
+// backend/routes/crudRoutes.js
+const express = require('express');
+const router = express.Router();
+const pool = require('../db');
+
+// ✅ Get all records
+router.get('/records', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM your_table ORDER BY id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Insert record
+router.post('/records', async (req, res) => {
+  const { name, email } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO your_table (name, email) VALUES ($1, $2) RETURNING *',
+      [name, email]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Update record
+router.put('/records/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE your_table SET name=$1, email=$2 WHERE id=$3 RETURNING *',
+      [name, email, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Delete record
+router.delete('/records/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM your_table WHERE id=$1', [id]);
+    res.json({ message: 'Record deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
+
+
+
+
+
