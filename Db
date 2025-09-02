@@ -297,3 +297,98 @@ const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+
+
+// crudRoutes.js
+const express = require("express");
+const router = express.Router();
+const pool = require("./db"); // import your db connection
+
+// ---------------- CREATE ----------------
+router.post("/", async (req, res) => {
+  try {
+    const { name, age, email } = req.body;
+    const result = await pool.query(
+      "INSERT INTO test (name, age, email) VALUES ($1, $2, $3) RETURNING *",
+      [name, age, email]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Error in CREATE:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ---------------- READ ALL ----------------
+router.get("/", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM test ORDER BY id ASC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error in READ ALL:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ---------------- READ BY ID ----------------
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("SELECT * FROM test WHERE id = $1", [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error in READ BY ID:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ---------------- UPDATE ----------------
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, age, email } = req.body;
+
+    const result = await pool.query(
+      "UPDATE test SET name = $1, age = $2, email = $3 WHERE id = $4 RETURNING *",
+      [name, age, email, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error in UPDATE:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ---------------- DELETE ----------------
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      "DELETE FROM test WHERE id = $1 RETURNING *",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    res.json({ message: "Record deleted successfully" });
+  } catch (err) {
+    console.error("Error in DELETE:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+module.exports = router;
