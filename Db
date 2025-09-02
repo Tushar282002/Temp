@@ -392,3 +392,97 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+
+
+
+
+
+const express = require("express");
+const router = express.Router();
+const pool = require("../db");
+
+// ✅ GET all records
+router.get("/records", async (req, res) => {
+  try {
+    const result = await pool.query('SELECT "id", "Name", "Age", "Email" FROM test');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ✅ GET record by ID
+router.get("/records/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT "id", "Name", "Age", "Email" FROM test WHERE "id" = $1',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ✅ INSERT record
+router.post("/records", async (req, res) => {
+  const { Name, Age, Email } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO test("Name", "Age", "Email") VALUES($1, $2, $3) RETURNING *',
+      [Name, Age, Email]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ✅ UPDATE record by ID
+router.put("/records/:id", async (req, res) => {
+  const { id } = req.params;
+  const { Name, Age, Email } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE test SET "Name"=$1, "Age"=$2, "Email"=$3 WHERE "id"=$4 RETURNING *',
+      [Name, Age, Email, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ✅ DELETE record by ID
+router.delete("/records/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM test WHERE "id"=$1 RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+    res.json({ message: "Record deleted successfully" });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+module.exports = router;
