@@ -93,6 +93,7 @@ namespace YourNamespace.Controllers
 
 Sonu is an aspiring DevOps engineer passionate about building efficient, scalable, and automated systems. With strong skills in AWS cloud computing, Linux administration, and containerization using Docker, he is eager to bridge the gap between development and operations. Known for his problem-solving mindset, Sonu thrives in fast-paced environments and continuously explores modern tools to streamline workflows. Beyond technical expertise, he values collaboration, communication, and team bonding, recognizing that success in DevOps relies on collective effort. With a commitment to learning and innovation, Sonu aims to contribute to reliable, secure, and high-performing infrastructure solutions.
 csv.ts
+
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
@@ -113,16 +114,23 @@ export class CsvService {
 I am pleased to refer Kiran, a highly driven and technically strong engineering student from Chandigarh University. She has hands-on experience in building impactful projects like a geo-location-based Future of Retail system, an AR-powered try-on feature, and a smart flight navigation tool leveraging A* and real-time APIs. With internships in Python development and blockchain, she has demonstrated adaptability across diverse domains. Skilled in C++, Java, Python, web development, and databases, Kiran also brings leadership qualities as an NCC Best Cadet and national-level athlete. Her strong problem-solving abilities and project expertise make her a valuable candidate.
 
 app.compoent.ts
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
+import { CommonModule } from '@angular/common';
 import { CsvService } from './services/csv.service';
 
 @Component({
   selector: 'app-root',
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+  standalone: true,
+  imports: [RouterOutlet, CommonModule],
+  templateUrl: './app.html',
+  styleUrls: ['./app.css']
 })
-export class AppComponent implements OnInit {
-  title = 'CSV Reader';
+export class App implements OnInit {
+  // Title using signal
+  protected readonly title = signal('CSV Reader');
+
+  // For storing API data
   csvData: any;
 
   constructor(private csvService: CsvService) {}
@@ -140,11 +148,9 @@ export class AppComponent implements OnInit {
   }
 }
 
-
-
 <div style="text-align:center; margin-top:20px;">
-  <h1>{{ title }}</h1>
-
+  <h1>{{ title() }}</h1> <!-- signal needs () -->
+  
   <div *ngIf="csvData; else loading">
     <h3>CSV Data:</h3>
     <pre>{{ csvData | json }}</pre>
@@ -154,3 +160,4 @@ export class AppComponent implements OnInit {
     <p>Loading data from API...</p>
   </ng-template>
 </div>
+
