@@ -106,42 +106,40 @@ export class CsvService {
 
   constructor(private http: HttpClient) {}
 
-  getCsvData(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/api/CSV/read`);
+  // API returns string, so use responseType: 'text'
+  getCsvData(): Observable<string> {
+    return this.http.get(`${this.baseUrl}/api/CSV/read`, { responseType: 'text' });
   }
 }
+
 
 I am pleased to refer Kiran, a highly driven and technically strong engineering student from Chandigarh University. She has hands-on experience in building impactful projects like a geo-location-based Future of Retail system, an AR-powered try-on feature, and a smart flight navigation tool leveraging A* and real-time APIs. With internships in Python development and blockchain, she has demonstrated adaptability across diverse domains. Skilled in C++, Java, Python, web development, and databases, Kiran also brings leadership qualities as an NCC Best Cadet and national-level athlete. Her strong problem-solving abilities and project expertise make her a valuable candidate.
 
 app.compoent.ts
 import { Component, OnInit, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { CsvService } from './services/csv.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, CommonModule],
+  imports: [CommonModule],
   templateUrl: './app.html',
   styleUrls: ['./app.css']
 })
 export class App implements OnInit {
-  // Title using signal
   protected readonly title = signal('CSV Reader');
-
-  // For storing API data
-  csvData: any;
+  csvData: string | null = null;
 
   constructor(private csvService: CsvService) {}
 
   ngOnInit(): void {
     this.csvService.getCsvData().subscribe({
-      next: (data) => {
+      next: (data: string) => {
         this.csvData = data;
-        console.log('API Response:', data);
+        console.log('API Response (string):', data);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('API Error:', err);
       }
     });
@@ -149,15 +147,14 @@ export class App implements OnInit {
 }
 
 <div style="text-align:center; margin-top:20px;">
-  <h1>{{ title() }}</h1> <!-- signal needs () -->
-  
+  <h1>{{ title() }}</h1>
+
   <div *ngIf="csvData; else loading">
-    <h3>CSV Data:</h3>
-    <pre>{{ csvData | json }}</pre>
+    <h3>CSV Data (Raw String):</h3>
+    <pre>{{ csvData }}</pre>
   </div>
 
   <ng-template #loading>
     <p>Loading data from API...</p>
   </ng-template>
 </div>
-
