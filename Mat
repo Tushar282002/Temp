@@ -1,0 +1,20 @@
+<mat-form-field appearance="outline" class="mb-2 custom-bootstrap-dropdown form-group">
+  <mat-label>{{ label }}</mat-label>
+
+  <mat-select
+    [id]="id"
+    [(value)]="selectedValue"
+    (selectionChange)="onItemSelectionChange($event.value)"
+    [disabled]="disabled"
+  >
+    <!-- Placeholder -->
+    <mat-option *ngIf="placeholder" [disabled]="true">
+      {{ placeholder }}
+    </mat-option>
+
+    <!-- Options -->
+    <mat-option *ngFor="let item of items" [value]="item">
+      {{ getDisplayValue(item) }}
+    </mat-option>
+  </mat-select>
+</mat-form-field>
