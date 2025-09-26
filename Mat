@@ -18,3 +18,13 @@
     </mat-option>
   </mat-select>
 </mat-form-field>
+
+::ng-deep .mat-option:hover {
+  background-color: green !important;
+  color: white !important;
+}
+
+::ng-deep .mat-option.mat-selected {
+  background-color: darkgreen !important;
+  color: white !important;
+}
