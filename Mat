@@ -28,3 +28,63 @@
   background-color: darkgreen !important;
   color: white !important;
 }
+
+
+
+
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
+
+@NgModule({
+  imports: [
+    MatFormFieldModule,
+    MatSelectModule,
+    MatInputModule,
+    // other imports...
+  ],
+})
+export class AppModule {}
+
+
+
+<mat-form-field appearance="outline" class="w-100">
+  <mat-label>{{ label }}</mat-label>
+
+  <mat-select
+    [id]="id"
+    [(value)]="selectedValue"
+    (selectionChange)="onItemSelectionChange($event.value)"
+    [disabled]="disabled"
+  >
+    <!-- Placeholder -->
+    <mat-option *ngIf="placeholder" [disabled]="true">
+      {{ placeholder }}
+    </mat-option>
+
+    <!-- Options -->
+    <mat-option *ngFor="let item of items" [value]="item">
+      {{ getDisplayValue(item) }}
+    </mat-option>
+  </mat-select>
+</mat-form-field>
+
+
+
+
+angular.json
+"styles": [
+  "node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
+  "src/styles.scss"
+]
+
+
+::ng-deep .mat-option:hover:not(.mat-option-disabled) {
+  background-color: green !important;
+  color: white !important;
+}
+
+::ng-deep .mat-option.mat-selected:not(.mat-option-disabled) {
+  background-color: darkgreen !important;
+  color: white !important;
+}
