@@ -29,62 +29,58 @@
 
 
 
-.custom-bootstrap-dropdown {
-  font-size: var(--font-size, 14px);
-  margin-left: 2px;
-  margin-bottom: 1px;
+@use '../../../styles/colors.scss' as color;
 
-  .form-label {
-    font-size: 0.85em;
-    line-height: 0.9em;
-    font-weight: 400;
-    margin-bottom: 4px;
-    display: block;
-  }
+.custom-mat-dropdown {
+  font-size: 14px; // base font size for the dropdown
 
   .custom-mat-form-field {
     width: 100%;
-  }
 
-  ::ng-deep .mat-form-field-appearance-fill .mat-form-field-flex {
-    background-color: #ffffff; /* white background like normal select */
-    border: 1px solid #b4babf;
-    border-radius: 0.2rem;
-    padding: 0 5px;
-    height: calc(1em + 0.75rem + 2px);
-    font-size: 1em;
-    font-family: "open-sans", sans-serif;
-  }
+    .mat-form-field-label {
+      font-size: 0.85em;  // label font
+      line-height: 1em;
+      font-weight: 400;
+      color: #000; // black label
+    }
 
-  ::ng-deep .mat-select-trigger {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    padding-right: 25px; /* space for dropdown arrow */
-  }
+    .custom-mat-select {
+      font-size: 1em; // value font
+      font-family: "open-sans";
+      height: calc(1em + 0.75rem + 2px);
+      padding: 0px 25px 0px 5px;
 
-  /* Dropdown panel */
-  ::ng-deep .mat-select-panel {
-    border: 1px solid #b4babf;
-    border-radius: 0.2rem;
-    font-size: 1em;
-    font-family: "open-sans", sans-serif;
-  }
+      .mat-select-trigger {
+        line-height: 1em; // vertically align text
+        padding: 0 0 0 5px;
+      }
 
-  /* Hover effect */
-  ::ng-deep .mat-option:hover:not(.mat-option-disabled) {
-    background-color: #3071a9 !important;
-    color: #ffffff !important;
-  }
+      // Dropdown panel styles
+      ::ng-deep .mat-select-panel {
+        font-family: "open-sans";
+        font-size: 1em;
+      }
 
-  /* Selected option */
-  ::ng-deep .mat-option.mat-selected:not(.mat-option-disabled) {
-    background-color: darkgreen !important;
-    color: #ffffff !important;
-  }
+      // Option hover
+      ::ng-deep .mat-option:hover:not(.mat-option-disabled) {
+        background-color: green !important;
+        color: white !important;
+      }
 
-  /* Dropdown arrow */
-  ::ng-deep .mat-select-arrow {
-    color: #506166;
+      // Option selected
+      ::ng-deep .mat-option.mat-selected:not(.mat-option-disabled) {
+        background-color: darkgreen !important;
+        color: white !important;
+      }
+    }
+  }
+}
+
+/* Responsive adjustments */
+@media only screen and (max-width: 1280px) {
+  .custom-mat-select {
+    height: calc(1em + 0.55rem + 2px);
+    padding: 0px 15px 0px 5px;
+    font-size: 0.9em;
   }
 }
