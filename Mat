@@ -1,138 +1,90 @@
-<!-- custom-dropdown.component.html -->
 <p>single-select-dropdown2 works!</p>
 
 <form class="mb-2 custom-bootstrap-dropdown form-group">
-  <mat-form-field appearance="fill" class="custom-mat-field">
-    <mat-label class="form-label" for="{{ id }}">{{ label }}</mat-label>
+
+  <mat-form-field appearance="fill" class="custom-mat-form-field">
+    <mat-label class="form-label" for="id">{{ label }}</mat-label>
 
     <mat-select
       class="form-control"
+      id="selectedValue"
+      style="cursor: pointer;"
       [id]="id"
       name="selectedValue"
       [(ngModel)]="selectedValue"
       (ngModelChange)="onItemSelectionChange($event)"
-      [disabled]="disabled">
-
-      <!-- custom trigger: selected text + bold icon aligned to right -->
-      <mat-select-trigger>
-        <span class="selected-text">{{ selectedValue ? getDisplayValue(selectedValue) : (placeholder || 'Select') }}</span>
-        <span class="bold-icon" aria-hidden="true">▾</span>
-      </mat-select-trigger>
-
-      <!-- placeholder option (disabled) -->
-      <mat-option *ngIf="placeholder" [value]="''" disabled class="matoption">
+      [disabled]="disabled"
+    >
+      <mat-option *ngIf="placeholder" [value]="" disabled>
         {{ placeholder }}
       </mat-option>
 
-      <!-- options -->
-      <mat-option *ngFor="let item of items" [value]="item" class="matoptions">
+      <mat-option *ngFor="let item of items" [value]="item">
         {{ getDisplayValue(item) }}
       </mat-option>
     </mat-select>
   </mat-form-field>
+
 </form>
 
 
 
-:host { display: block; }
-
-/* Wrapper label styles (like your original select) */
-.custom-bootstrap-dropdown .form-label {
-  font-size: .85em;
-  line-height: .9em;
-  font-weight: 400;
+.custom-bootstrap-dropdown {
+  font-size: var(--font-size, 14px);
   margin-left: 2px;
-  margin-bottom: 4px;
-}
+  margin-bottom: 1px;
 
-/* --- Overrides for mat-select (component-scoped) --- */
-::ng-deep .custom-mat-field .mat-form-field-flex {
-  border: 1px solid #B4BABF; /* light gray border */
-  border-bottom-width: 2px;
-  border-radius: 0.2rem;
-  background-color: #ffffff;
-  font-family: "open-sans", sans-serif;
-  padding: 0 8px;
-  min-height: calc(1em + 0.75rem + 2px); /* approximate native select height */
-  align-items: center;
-  transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
-}
+  .form-label {
+    font-size: 0.85em;
+    line-height: 0.9em;
+    font-weight: 400;
+    margin-bottom: 4px;
+    display: block;
+  }
 
-::ng-deep .custom-mat-field.mat-focused .mat-form-field-flex,
-::ng-deep .custom-mat-field .mat-form-field-flex:focus-within {
-  border-color: #506166; /* primary focus color */
-  box-shadow: 0 0 0 2px rgba(80,97,102,0.08);
-}
+  .custom-mat-form-field {
+    width: 100%;
+  }
 
-/* Trigger (value area) — make it behave like a native select */
-::ng-deep .custom-mat-field .mat-select-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  font-size: 1em;
-  height: calc(1em + 0.75rem + 2px);
-  padding: 0 6px 0 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  box-sizing: border-box;
-}
+  ::ng-deep .mat-form-field-appearance-fill .mat-form-field-flex {
+    background-color: #ffffff; /* white background like normal select */
+    border: 1px solid #b4babf;
+    border-radius: 0.2rem;
+    padding: 0 5px;
+    height: calc(1em + 0.75rem + 2px);
+    font-size: 1em;
+    font-family: "open-sans", sans-serif;
+  }
 
-/* selected text should ellipsize when long */
-::ng-deep .custom-mat-field .mat-select-trigger .selected-text {
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  ::ng-deep .mat-select-trigger {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding-right: 25px; /* space for dropdown arrow */
+  }
 
-/* hide the default material arrow so our icon lines up like the native select */
-::ng-deep .custom-mat-field .mat-select-arrow {
-  display: none !important;
-}
+  /* Dropdown panel */
+  ::ng-deep .mat-select-panel {
+    border: 1px solid #b4babf;
+    border-radius: 0.2rem;
+    font-size: 1em;
+    font-family: "open-sans", sans-serif;
+  }
 
-/* bold icon on the right */
-.bold-icon {
-  font-weight: 700;
-  color: #000;
-  font-size: 1.2rem;
-  line-height: 1;
-  margin-left: 6px;
-  text-shadow: 1px 1px 1px rgba(0,0,0,0.12), -1px 1px 1px rgba(0,0,0,0.12);
-}
+  /* Hover effect */
+  ::ng-deep .mat-option:hover:not(.mat-option-disabled) {
+    background-color: #3071a9 !important;
+    color: #ffffff !important;
+  }
 
-/* mat-option styling inside overlay panel */
-::ng-deep .mat-select-panel .mat-option {
-  font-family: "open-sans", sans-serif;
-  font-size: 1em;
-  padding: 6px 12px;
-}
+  /* Selected option */
+  ::ng-deep .mat-option.mat-selected:not(.mat-option-disabled) {
+    background-color: darkgreen !important;
+    color: #ffffff !important;
+  }
 
-/* hover (overlay) — your blue */
-::ng-deep .mat-select-panel .mat-option:hover:not(.mat-option-disabled) {
-  background-color: #3071a9 !important;
-  color: #fff !important;
-}
-
-/* selected state */
-::ng-deep .mat-select-panel .mat-option.mat-selected:not(.mat-option-disabled) {
-  background-color: darkgreen !important;
-  color: #fff !important;
-}
-
-/* panel appearance to mimic native dropdown */
-::ng-deep .mat-select-panel {
-  border-radius: 0.2rem;
-  padding: 4px 0;
-  min-width: 120px;
-}
-
-/* responsive tweak */
-@media only screen and (max-width: 1280px) {
-  ::ng-deep .custom-mat-field .mat-select-trigger {
-    height: calc(1em + 0.55rem + 2px);
-    padding-right: 12px;
-    font-size: 0.95rem;
+  /* Dropdown arrow */
+  ::ng-deep .mat-select-arrow {
+    color: #506166;
   }
 }
