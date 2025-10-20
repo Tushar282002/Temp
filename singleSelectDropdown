@@ -1,0 +1,211 @@
+import { CommonModule } from '@angular/common';
+import {
+  Component,
+  OnChanges,
+  OnInit,
+  Input,
+  Output,
+  EventEmitter,
+  SimpleChanges,
+  ViewEncapsulation
+} from '@angular/core';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatOptionModule } from '@angular/material/core';
+import { MatInputModule } from '@angular/material/input';
+import { ListOfValues } from '../../core/models/list-of-values.model';
+import { LovServiceInterface } from '../../core/services/abstractions/lov.service.interface';
+import { PreferenceServiceInterface } from '../../core/services/abstractions/preference.interface';
+import { createObserver } from '../../core/utils/observer-utils';
+
+@Component({
+  selector: 'app-single-select-dropdown2',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
+    MatSelectModule,
+    MatFormFieldModule,
+    MatOptionModule,
+    MatInputModule
+  ],
+  templateUrl: './single-select-dropdown2.component.html',
+  styleUrls: ['./single-select-dropdown2.component.scss'],
+  encapsulation: ViewEncapsulation.None
+})
+export class SingleSelectDropdown2Component<T> implements OnInit, OnChanges {
+
+  @Input() label!: string;
+  @Input() placeholder!: string;
+  @Input() items: T[] = []; // <-- Default empty list
+  @Input() id!: string;
+  @Input() keyProp!: keyof T;
+  @Input() displayProp!: keyof T;
+  @Input() disabled: boolean = false;
+  @Input() type: string = ''; // Optional now
+  @Input() hasAll: boolean = false;
+  @Input() moduleName: string = '';
+
+  private _selectedItem: T | null = null;
+
+  @Input()
+  set selectedItem(value: T | null) {
+    this._selectedItem = value;
+    this.selectedItemChange.emit(value);
+  }
+
+  get selectedItem(): T | null {
+    return this._selectedItem;
+  }
+
+  @Output() selectionChange = new EventEmitter<T>();
+  @Output() selectedItemChange = new EventEmitter<T | null>();
+
+  selectedValue: T | null = null;
+
+  defaultLov: ListOfValues = {
+    type: 'DEFAULT',
+    value: 'All',
+    description: 'All',
+    low: '',
+    orderBy: '',
+    parent: '',
+    high: '',
+    targetHigh: '',
+    targetLow: '',
+    valueAndDescription: '',
+    sortorder: 0
+  };
+
+  constructor(
+    private readonly lovService: LovServiceInterface,
+    private readonly preferences?: PreferenceServiceInterface // <-- OPTIONAL now
+  ) {}
+
+  // --- CHANGED: load LOV only if items not provided ---
+  loadLovData(): void {
+    // If items already provided (hardcoded source), skip API call
+    if (this.items && this.items.length > 0) {
+      console.log('Items provided via itemSource, skipping LOV API call.');
+      this.setupPreferencesSubscription(); // Still setup preference if available
+      return;
+    }
+
+    // Load from API only if type is defined
+    if (this.type) {
+      this.lovService.getLovData(this.type).subscribe(
+        createObserver<ListOfValues[]>((data) => {
+          if (this.hasAll) {
+            data.splice(0, 0, this.defaultLov);
+          }
+          this.items = data as unknown as T[];
+          this.setupPreferencesSubscription();
+        }, 'Lov Data')
+      );
+    }
+  }
+
+  setSelectedValue(val: T | null): void {
+    if (val && val !== this.selectedValue) {
+      this.selectedValue = val;
+      this.handleSelectionChange(val);
+    }
+  }
+
+  handleSelectionChange(selectedItem: T): void {
+    this.selectionChange.emit(selectedItem);
+    this.selectedItemChange.emit(selectedItem);
+  }
+
+  // --- CHANGED: Preferences optional ---
+  setupPreferencesSubscription(): void {
+    if (!this.preferences || !this.type) {
+      // Preferences not provided or type not defined, skip preference setup
+      if (!this.selectedItem && this.items.length > 0) {
+        this.selectedItem = this.items[0];
+        this.selectedValue = this.selectedItem;
+      }
+      return;
+    }
+
+    // Preference reset listener
+    this.preferences.preferencesResetContextData$?.subscribe(() => {
+      this.setupPreferencesSubscription();
+    });
+
+    const preferenceValue = this.preferences.getPreferenceByKey(
+      this.getCombinedModuleNameAndType()
+    );
+
+    const selectedItem = this.items.find((item) => {
+      const lov = item as ListOfValues;
+      if (!lov.orderBy || lov.orderBy.trim() === '') {
+        return lov.value === preferenceValue;
+      }
+      return lov.orderBy === preferenceValue;
+    }) as T;
+
+    this.selectedItem = selectedItem || this.items[0] || null;
+    this.selectedValue = this.selectedItem;
+  }
+
+  ngOnInit(): void {
+    this.loadLovData(); // This now respects itemSource priority
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['type'] && !changes['type'].firstChange) {
+      this.loadLovData();
+    }
+
+    if (changes['selectedItem'] && !changes['selectedItem'].firstChange) {
+      this.updateSelectedValue();
+    }
+  }
+
+  updateSelectedValue(): void {
+    if (this.selectedItem) {
+      this.selectedValue = this.items.find(item => item === this.selectedItem) as T;
+      this.onSelectionChange(this.selectedItem);
+    }
+  }
+
+  onSelectionChange(selectedItem: T): void {
+    this.selectedValue = selectedItem;
+    if (selectedItem) {
+      this.selectionChange.emit(selectedItem);
+    }
+  }
+
+  getDisplayValue(item: T): string {
+    return item[this.displayProp] as unknown as string;
+  }
+
+  getIdentifier(item: T): any {
+    return item[this.keyProp];
+  }
+
+  onItemSelectionChange(event: T): void {
+    this.selectedItem = this.items.find(item => item === event) as T;
+
+    if (this.preferences && this.type) {
+      this.preferences.setPreference(
+        this.getCombinedModuleNameAndType(),
+        (this.selectedValue as ListOfValues)?.orderBy ?? (this.selectedValue as ListOfValues)?.value
+      );
+    }
+
+    console.log('Updated Selection:', this.selectedValue);
+  }
+
+  getCombinedModuleNameAndType(): string {
+    return `${this.moduleName}.${this.type}`;
+  }
+
+  getType(combinedString: string): string {
+    const splitString = combinedString.split('.');
+    return splitString.length > 1 ? splitString.slice(1).join('.') : combinedString;
+  }
+}
