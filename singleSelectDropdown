@@ -1,211 +1,216 @@
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  Component,
-  OnChanges,
-  OnInit,
-  Input,
-  Output,
-  EventEmitter,
-  SimpleChanges,
-  ViewEncapsulation
-} from '@angular/core';
-import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
+import { signal, computed } from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatOptionModule } from '@angular/material/core';
-import { MatInputModule } from '@angular/material/input';
+import { MatSelectChange } from '@angular/material/select';
+import { finalize } from 'rxjs/operators';
+
+import { createControlValueAccessorProviders } from '../abstractions/control-value-accessor-base';
 import { ListOfValues } from '../../core/models/list-of-values.model';
 import { LovServiceInterface } from '../../core/services/abstractions/lov.service.interface';
 import { PreferenceServiceInterface } from '../../core/services/abstractions/preference.interface';
-import { createObserver } from '../../core/utils/observer-utils';
+import { OptionInfo } from '../abstractions/option-info'; // optional helper type if you have it
 
 @Component({
-  selector: 'app-single-select-dropdown2',
+  selector: 'app-single-selection-dropdown',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    ReactiveFormsModule,
-    MatSelectModule,
-    MatFormFieldModule,
-    MatOptionModule,
-    MatInputModule
-  ],
-  templateUrl: './single-select-dropdown2.component.html',
-  styleUrls: ['./single-select-dropdown2.component.scss'],
-  encapsulation: ViewEncapsulation.None
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatSelectModule, MatOptionModule],
+  templateUrl: './single-selection-dropdown.component.html',
+  styleUrls: ['./single-selection-dropdown.component.scss'],
+  providers: [
+    // provider helper that wires up NG_VALUE_ACCESSOR for you. If you don't have it,
+    // replace with the NG_VALUE_ACCESSOR provider you used elsewhere.
+    createControlValueAccessorProviders(forwardRef(() => SingleSelectionDropdownComponent))
+  ]
 })
-export class SingleSelectDropdown2Component<T> implements OnInit, OnChanges {
+export class SingleSelectionDropdownComponent<T = ListOfValues> implements OnInit, OnChanges {
+  // Inputs
+  @Input() label = '';
+  @Input() placeholder = 'Select';
+  @Input() items: T[] | null = null;            // optional: caller can pass items directly
+  @Input() lovType = '';                        // if provided, LOVs will be loaded from service
+  @Input() keyProp: keyof T = 'value' as any;   // property used as identifier
+  @Input() displayProp: keyof T = 'description' as any; // property used to display
+  @Input() hasAll = false;
+  @Input() moduleName = '';
+  @Input() type = '';                           // used for preferences key
 
-  @Input() label!: string;
-  @Input() placeholder!: string;
-  @Input() items: T[] = []; // <-- Default empty list
-  @Input() id!: string;
-  @Input() keyProp!: keyof T;
-  @Input() displayProp!: keyof T;
-  @Input() disabled: boolean = false;
-  @Input() type: string = ''; // Optional now
-  @Input() hasAll: boolean = false;
-  @Input() moduleName: string = '';
-
-  private _selectedItem: T | null = null;
-
-  @Input()
-  set selectedItem(value: T | null) {
-    this._selectedItem = value;
-    this.selectedItemChange.emit(value);
-  }
-
-  get selectedItem(): T | null {
-    return this._selectedItem;
-  }
-
-  @Output() selectionChange = new EventEmitter<T>();
+  // Outputs
+  @Output() selectionChange = new EventEmitter<T | null>();
   @Output() selectedItemChange = new EventEmitter<T | null>();
 
-  selectedValue: T | null = null;
+  // internal reactive state using signals
+  sourceItems = signal<T[]>([]);
+  selected = signal<T | null>(null);
+  isLoading = signal(false);
+  disabled = signal(false);
 
-  defaultLov: ListOfValues = {
-    type: 'DEFAULT',
-    value: 'All',
-    description: 'All',
-    low: '',
-    orderBy: '',
-    parent: '',
-    high: '',
-    targetHigh: '',
-    targetLow: '',
-    valueAndDescription: '',
-    sortorder: 0
-  };
+  // computed display for template convenience
+  displayValue = computed(() => {
+    const s = this.selected();
+    return s ? String((s as any)[this.displayProp]) : '';
+  });
+
+  // ControlValueAccessor callbacks (set by registerOnChange / registerOnTouched)
+  private onChange: (v: any) => void = () => {};
+  private onTouched: () => void = () => {};
 
   constructor(
     private readonly lovService: LovServiceInterface,
-    private readonly preferences?: PreferenceServiceInterface // <-- OPTIONAL now
+    private readonly preferences: PreferenceServiceInterface
   ) {}
 
-  // --- CHANGED: load LOV only if items not provided ---
-  loadLovData(): void {
-    // If items already provided (hardcoded source), skip API call
-    if (this.items && this.items.length > 0) {
-      console.log('Items provided via itemSource, skipping LOV API call.');
-      this.setupPreferencesSubscription(); // Still setup preference if available
-      return;
-    }
-
-    // Load from API only if type is defined
-    if (this.type) {
-      this.lovService.getLovData(this.type).subscribe(
-        createObserver<ListOfValues[]>((data) => {
-          if (this.hasAll) {
-            data.splice(0, 0, this.defaultLov);
-          }
-          this.items = data as unknown as T[];
-          this.setupPreferencesSubscription();
-        }, 'Lov Data')
-      );
-    }
-  }
-
-  setSelectedValue(val: T | null): void {
-    if (val && val !== this.selectedValue) {
-      this.selectedValue = val;
-      this.handleSelectionChange(val);
-    }
-  }
-
-  handleSelectionChange(selectedItem: T): void {
-    this.selectionChange.emit(selectedItem);
-    this.selectedItemChange.emit(selectedItem);
-  }
-
-  // --- CHANGED: Preferences optional ---
-  setupPreferencesSubscription(): void {
-    if (!this.preferences || !this.type) {
-      // Preferences not provided or type not defined, skip preference setup
-      if (!this.selectedItem && this.items.length > 0) {
-        this.selectedItem = this.items[0];
-        this.selectedValue = this.selectedItem;
-      }
-      return;
-    }
-
-    // Preference reset listener
-    this.preferences.preferencesResetContextData$?.subscribe(() => {
-      this.setupPreferencesSubscription();
-    });
-
-    const preferenceValue = this.preferences.getPreferenceByKey(
-      this.getCombinedModuleNameAndType()
-    );
-
-    const selectedItem = this.items.find((item) => {
-      const lov = item as ListOfValues;
-      if (!lov.orderBy || lov.orderBy.trim() === '') {
-        return lov.value === preferenceValue;
-      }
-      return lov.orderBy === preferenceValue;
-    }) as T;
-
-    this.selectedItem = selectedItem || this.items[0] || null;
-    this.selectedValue = this.selectedItem;
-  }
-
   ngOnInit(): void {
-    this.loadLovData(); // This now respects itemSource priority
+    // if items were passed directly, use them; otherwise attempt load if lovType set
+    if (this.items && this.items.length > 0) {
+      this.sourceItems.set(this.items);
+      this.setupPreferences();
+    } else if (this.lovType) {
+      this.loadLovData();
+    } else {
+      // still try to setup preferences so default picks can apply
+      this.setupPreferences();
+    }
+
+    // subscribe to preferences reset event if your service exposes one (optional)
+    if ((this.preferences as any).preferencesResetContextDatas && (this.preferences as any).preferencesResetContextDatas.subscribe) {
+      (this.preferences as any).preferencesResetContextDatas.subscribe(() => this.setupPreferences());
+    }
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['type'] && !changes['type'].firstChange) {
-      this.loadLovData();
+    if (changes['items'] && this.items) {
+      this.sourceItems.set(this.items);
+      this.setupPreferences();
     }
-
-    if (changes['selectedItem'] && !changes['selectedItem'].firstChange) {
-      this.updateSelectedValue();
-    }
-  }
-
-  updateSelectedValue(): void {
-    if (this.selectedItem) {
-      this.selectedValue = this.items.find(item => item === this.selectedItem) as T;
-      this.onSelectionChange(this.selectedItem);
+    if (changes['lovType'] && !changes['lovType'].firstChange) {
+      // reload lovs if lovType changed
+      if (this.lovType) {
+        this.loadLovData();
+      }
     }
   }
 
-  onSelectionChange(selectedItem: T): void {
-    this.selectedValue = selectedItem;
-    if (selectedItem) {
-      this.selectionChange.emit(selectedItem);
+  // --- ControlValueAccessor methods (writeValue/registerOnChange/registerOnTouched/setDisabledState) ---
+  writeValue(obj: any): void {
+    // obj may be an identifier or the object itself. We support both:
+    if (obj == null) {
+      this.selected.set(null);
+      return;
+    }
+
+    // if items are already loaded, find item by keyProp; otherwise store and wait for items
+    const items = this.sourceItems();
+    if (items && items.length > 0) {
+      const found = this.findItemFromValue(obj);
+      this.selected.set(found ?? null);
+    } else {
+      // temporarily set as-is (caller may pass object)
+      this.selected.set(obj as T);
     }
   }
 
-  getDisplayValue(item: T): string {
-    return item[this.displayProp] as unknown as string;
-  }
+  registerOnChange(fn: any): void { this.onChange = fn; }
+  registerOnTouched(fn: any): void { this.onTouched = fn; }
+  setDisabledState(isDisabled: boolean): void { this.disabled.set(isDisabled); }
 
-  getIdentifier(item: T): any {
-    return item[this.keyProp];
-  }
-
-  onItemSelectionChange(event: T): void {
-    this.selectedItem = this.items.find(item => item === event) as T;
-
-    if (this.preferences && this.type) {
-      this.preferences.setPreference(
-        this.getCombinedModuleNameAndType(),
-        (this.selectedValue as ListOfValues)?.orderBy ?? (this.selectedValue as ListOfValues)?.value
-      );
+  // --- user interaction handler used in template ---
+  onSelectionChange(value: T | null): void {
+    this.selected.set(value);
+    // persist preference (if moduleName/type provided)
+    if (value && this.moduleName && this.type && (this.preferences?.setPreference)) {
+      const prefKey = this.getCombinedModuleNameAndType();
+      // if your items are ListOfValues, persist value or orderBy as needed:
+      try {
+        (this.preferences as any).setPreference(prefKey, (value as any).value ?? (value as any).orderBy ?? value);
+      } catch {
+        // ignore if preferences service shaped differently
+      }
     }
 
-    console.log('Updated Selection:', this.selectedValue);
+    // inform Angular forms and parent
+    this.onChange(value);
+    this.onTouched();
+    this.selectionChange.emit(value);
+    this.selectedItemChange.emit(value);
   }
 
-  getCombinedModuleNameAndType(): string {
+  // --- helper: find item matching incoming value (by keyProp or by entire object) ---
+  private findItemFromValue(incoming: any): T | undefined {
+    const items = this.sourceItems();
+    if (!items || items.length === 0) return undefined;
+
+    // if incoming is object, try to match by keyProp or object equality
+    if (typeof incoming === 'object' && incoming !== null) {
+      return items.find(it => (it as any) === incoming || (it as any)[this.keyProp] === (incoming as any)[this.keyProp]);
+    }
+
+    // primitive incoming => match by keyProp or value property
+    return items.find(it => (it as any)[this.keyProp] === incoming || (it as any).value === incoming);
+  }
+
+  // --- load LOVs from service ---
+  private loadLovData(): void {
+    if (!this.lovType) return;
+    // guard: avoid double load if already have items
+    if (this.sourceItems().length > 0) {
+      this.setupPreferences();
+      return;
+    }
+
+    this.isLoading.set(true);
+    this.lovService.getLovData(this.lovType())
+      .pipe(finalize(() => this.isLoading.set(false)))
+      .subscribe({
+        next: (data: ListOfValues[]) => {
+          let items = data as unknown as T[];
+          if (this.hasAll) {
+            // insert an "All" option at the first position (shape depends on ListOfValues)
+            const allOption = { type: 'DEFAULT', value: '', description: 'All', orderBy: 0 } as unknown as T;
+            items = [allOption, ...items];
+          }
+          this.sourceItems.set(items);
+          this.setupPreferences();
+        },
+        error: () => {
+          // swallow or log - up to you
+        }
+      });
+  }
+
+  // --- read preference and set selection if available ---
+  private setupPreferences(): void {
+    if (!this.moduleName || !this.type || !this.preferences) return;
+
+    try {
+      const prefKey = this.getCombinedModuleNameAndType();
+      const prefVal = (this.preferences as any).getPreferencebyKey?.(prefKey);
+      if (prefVal == null) return;
+
+      // find matching item in sourceItems
+      const sel = this.sourceItems().find(it => {
+        const itAsAny = it as any;
+        // try orderBy then value
+        if (itAsAny.orderBy != null && itAsAny.orderBy === prefVal) return true;
+        if (itAsAny.value != null && itAsAny.value === prefVal) return true;
+        if (itAsAny[this.keyProp] != null && itAsAny[this.keyProp] === prefVal) return true;
+        return false;
+      });
+
+      if (sel) {
+        this.selected.set(sel);
+        this.onChange(sel);
+      }
+    } catch {
+      // ignore if preferences service different
+    }
+  }
+
+  // combine module + type into preference key format
+  private getCombinedModuleNameAndType(): string {
     return `${this.moduleName}.${this.type}`;
-  }
-
-  getType(combinedString: string): string {
-    const splitString = combinedString.split('.');
-    return splitString.length > 1 ? splitString.slice(1).join('.') : combinedString;
   }
 }
