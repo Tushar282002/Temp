@@ -1,3 +1,6 @@
+{{ getDisplayValue(item)?.replace(/\s*-\s*$/, '') }}
+
+
 excel-page.component.ts
 
 import { Component } from '@angular/core';
