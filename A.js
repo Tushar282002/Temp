@@ -1,6 +1,18 @@
 {{ getDisplayValue(item)?.replace(/\s*-\s*$/, '') }}
 
 
+const val = keyDetails?.get('greenSustainableField')?.value;
+
+let greenSustainableField = this.writeOpportunity.getValueFromLov(
+  val == null
+    ? []
+    : Array.isArray(val)
+    ? val
+    : typeof val === 'object' && val.value
+    ? [val.value]
+    : [val]
+);
+
 excel-page.component.ts
 
 import { Component } from '@angular/core';
