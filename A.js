@@ -1,3 +1,21 @@
+onOptionSelected(event: MatOption) {
+  if (event.selected) {
+    // Deselect any previously selected options (safety check)
+    this.matSelect?.options.forEach(option => {
+      if (option.viewValue !== event.viewValue) {
+        option.deselect();
+      }
+    });
+
+    // Emit the selected item cleanly
+    this.selectedItemChange.emit(event.value);
+    this.selectionChange.emit(event.value);
+  }
+
+  this.onTouched();
+}
+
+
 {{ getDisplayValue(item)?.replace(/\s*-\s*$/, '') }}
 
 
