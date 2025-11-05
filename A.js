@@ -1,3 +1,277 @@
+
+Based on the multi-select pattern, here are the exact changes you need to make in your single-select dropdown:
+
+## **Add `writeValue` method after the constructor:**
+
+```typescript
+constructor(
+  private readonly lovService: LovServiceInterface,
+  private readonly preferences?: PreferenceServiceInterface
+) {
+  super();
+}
+
+// ✅ ADD THIS METHOD HERE
+override writeValue(value: T): void {
+  console.log('🔽 writeValue called with:', value);
+  
+  if (value) {
+    // Simply set the value - don't try to match against items yet
+    this.selectedValue = value;
+    this.selectedItem = value;
+    this._selectedItem = value;
+    
+    console.log('✅ Value set:', this.selectedValue);
+  } else {
+    this.selectedValue = null;
+    this.selectedItem = null;
+    this._selectedItem = null;
+  }
+}
+```
+
+## **Fix the `_selectedItem` property declaration:**
+
+Change this:
+```typescript
+private selectedItem: T | null = null;  // ❌ Wrong - conflicts with getter/setter
+```
+
+To this:
+```typescript
+private _selectedItem: T | null = null;  // ✅ Correct - with underscore
+```
+
+## **Update the getter/setter to use `_selectedItem`:**
+
+```typescript
+@Input()
+set selectedItem(value: T | null) {
+  this._selectedItem = value;  // ✅ Use _selectedItem with underscore
+  this.selectedItemChange.emit(value);
+}
+
+get selectedItem(): T | null {
+  return this._selectedItem;  // ✅ Use _selectedItem with underscore
+}
+```
+
+## **Update `loadLovData` to handle existing selectedValue:**
+
+Replace your existing `loadLovData` method with this:
+
+```typescript
+loadLovData(): void {
+  // If items already provided (hardcoded source), skip API call
+  if (this.items && this.items.length > 0) {
+    this.setupPreferencesSubscription(); // Still setup preference if available
+    return;
+  }
+
+  // Load from API only if type is defined
+  if (this.lovType) {
+    this.lovService.getLovData(this.lovType).subscribe(
+      createObserver<ListOfValues[]>((data) => {
+        if (this.hasAll) {
+          data.splice(0, 0, this.defaultLov);
+        }
+        this.items = data as unknown as T[];
+        
+        console.log('✅ LOV items loaded:', this.items);
+        
+        // ✅ ADD THIS: If we have a selectedValue, try to match it with loaded items
+        if (this.selectedValue && this.items.length > 0) {
+          const matchedItem = this.findMatchingItem(this.selectedValue);
+          if (matchedItem) {
+            console.log('🔄 Matched selected value to loaded item:', matchedItem);
+            this.selectedValue = matchedItem;
+            this.selectedItem = matchedItem;
+          }
+        }
+        
+        this.setupPreferencesSubscription();
+      }, 'Lov Data')
+    );
+  }
+}
+```
+
+## **Add helper method to find matching item (add after `loadLovData`):**
+
+```typescript
+// ✅ ADD THIS NEW METHOD
+private findMatchingItem(value: T): T | null {
+  if (!this.items || this.items.length === 0) return null;
+  
+  return this.items.find(item => {
+    const itemLov = item as any;
+    const valueLov = value as any;
+    
+    // Try matching by value
+    if (itemLov.value && valueLov.value) {
+      return itemLov.value === valueLov.value;
+    }
+    
+    // Try matching by orderBy
+    if (itemLov.orderBy && valueLov.orderBy) {
+      return itemLov.orderBy === valueLov.orderBy;
+    }
+    
+    // Try matching by valueAndDescription
+    if (itemLov.valueAndDescription && valueLov.valueAndDescription) {
+      return itemLov.valueAndDescription === valueLov.valueAndDescription;
+    }
+    
+    // Fallback to direct comparison
+    return item === value;
+  }) || null;
+}
+```
+
+## **Fix the `setupPreferencesSubscription` condition:**
+
+Change this line:
+```typescript
+if (!this.usePreference || !this.preferences || !this.lovType || !this.moduleName) {
+```
+
+To this:
+```typescript
+if (!this.usePreference || !this.preferences || !this.lovType || !this.moduleName) {
+```
+
+(Fix the typo: `usePreference` should be consistent - pick either `usePreference` or `usePreferences` throughout)
+
+---
+
+## **Complete updated file (key sections):**
+
+```typescript
+export class SingleSelectDropdownComponent<T> extends OptionsParentBase<T> implements OnInit, OnChanges {
+
+  @Input() placeholder!: string;
+  @Input() items: T[] = [];
+  @Input() id!: string;
+  @Input() displayProp!: keyof T;
+  @Input() disabled: boolean = false;
+  @Input() lovType: string = '';
+  @Input() hasAll: boolean = false;
+  @Input() moduleName: string = '';
+  @Input() isEditMode: boolean = true;
+  @Input() usePreference: boolean = true;
+  @Input() autoSelectFirst: boolean = true;
+  @Input() alwaysEditable: boolean = false;
+  @Input() enableView: boolean = false;
+
+  private _selectedItem: T | null = null;  // ✅ Fixed with underscore
+  matSelect: any;
+
+  @Input()
+  set selectedItem(value: T | null) {
+    this._selectedItem = value;  // ✅ Use _selectedItem
+    this.selectedItemChange.emit(value);
+  }
+
+  get selectedItem(): T | null {
+    return this._selectedItem;  // ✅ Use _selectedItem
+  }
+
+  @Output() selectionChange = new EventEmitter<T>();
+  @Output() selectedItemChange = new EventEmitter<T | null>();
+
+  selectedValue: T | null = null;
+  defaultLov = new ListOfValuesImpl("Default", "All", "All", "", "", "", "", "", "");
+
+  constructor(
+    private readonly lovService: LovServiceInterface,
+    private readonly preferences?: PreferenceServiceInterface
+  ) {
+    super();
+  }
+
+  // ✅ ADD THIS METHOD
+  override writeValue(value: T): void {
+    console.log('🔽 writeValue called with:', value);
+    
+    if (value) {
+      this.selectedValue = value;
+      this.selectedItem = value;
+      console.log('✅ Value set:', this.selectedValue);
+    } else {
+      this.selectedValue = null;
+      this.selectedItem = null;
+    }
+  }
+
+  isDropdownDisabled(): boolean {
+    if (!this.enableView) {
+      return false;
+    }
+    return this.isDisabled();
+  }
+
+  loadLovData(): void {
+    if (this.items && this.items.length > 0) {
+      this.setupPreferencesSubscription();
+      return;
+    }
+
+    if (this.lovType) {
+      this.lovService.getLovData(this.lovType).subscribe(
+        createObserver<ListOfValues[]>((data) => {
+          if (this.hasAll) {
+            data.splice(0, 0, this.defaultLov);
+          }
+          this.items = data as unknown as T[];
+          
+          console.log('✅ LOV items loaded:', this.items);
+          
+          // ✅ Match existing value with loaded items
+          if (this.selectedValue && this.items.length > 0) {
+            const matchedItem = this.findMatchingItem(this.selectedValue);
+            if (matchedItem) {
+              console.log('🔄 Matched value to item:', matchedItem);
+              this.selectedValue = matchedItem;
+              this.selectedItem = matchedItem;
+            }
+          }
+          
+          this.setupPreferencesSubscription();
+        }, 'Lov Data')
+      );
+    }
+  }
+
+  // ✅ ADD THIS HELPER METHOD
+  private findMatchingItem(value: T): T | null {
+    if (!this.items || this.items.length === 0) return null;
+    
+    return this.items.find(item => {
+      const itemLov = item as any;
+      const valueLov = value as any;
+      
+      if (itemLov.value && valueLov.value) {
+        return itemLov.value === valueLov.value;
+      }
+      if (itemLov.orderBy && valueLov.orderBy) {
+        return itemLov.orderBy === valueLov.orderBy;
+      }
+      if (itemLov.valueAndDescription && valueLov.valueAndDescription) {
+        return itemLov.valueAndDescription === valueLov.valueAndDescription;
+      }
+      
+      return item === value;
+    }) || null;
+  }
+
+  // ... rest of your methods remain the same
+}
+```
+
+These are the **only changes** you need to make. The `writeValue` method is the key - it allows Angular's Reactive Forms to set the value when loading data from the API! 🎯
+
+
+
 onOptionSelected(event: MatOption) {
   if (event.selected) {
     // Deselect any previously selected options (safety check)
