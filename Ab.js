@@ -1,3 +1,213 @@
+The issue is clear from the console logs:
+
+```
+writeValue called with: ESG Pure Player
+Value set: ESG Pure Player
+```
+
+The API is returning just a **string** (`"ESG Pure Player"`), but your dropdown items are **objects** (ListOfValues with `value`, `description`, etc.). So when mat-select tries to display it, it can't find a matching object in the items array.
+
+## **Solution: Update `writeValue` to handle string values**
+
+Replace your `writeValue` method with this:
+
+```typescript
+override writeValue(value: T): void {
+  console.log('🔽 writeValue called with:', value);
+  console.log('🔽 Type:', typeof value);
+  
+  if (value) {
+    // If value is a string and items are objects, try to find matching item
+    if (typeof value === 'string' && this.items && this.items.length > 0) {
+      console.log('🔍 Value is string, searching in items...');
+      const matchedItem = this.findMatchingItemByString(value as unknown as string);
+      if (matchedItem) {
+        console.log('✅ Found matching item:', matchedItem);
+        this.selectedValue = matchedItem;
+        this.selectedItem = matchedItem;
+        return;
+      } else {
+        console.warn('⚠️ No matching item found for string:', value);
+        // Store as pending to match when items load
+        this.pendingStringValue = value as unknown as string;
+      }
+    } else {
+      // Value is already an object
+      this.selectedValue = value;
+      this.selectedItem = value;
+      console.log('✅ Value set:', this.selectedValue);
+    }
+  } else {
+    this.selectedValue = null;
+    this.selectedItem = null;
+  }
+}
+```
+
+## **Add these properties and methods:**
+
+```typescript
+export class SingleSelectDropdownComponent<T> extends OptionsParentBase<T> implements OnInit, OnChanges {
+  // ... existing properties
+  
+  private _selectedItem: T | null = null;
+  private pendingStringValue: string | null = null;  // ✅ ADD THIS
+  
+  // ... rest of your existing code
+
+  // ✅ ADD THIS METHOD - Find item by string value
+  private findMatchingItemByString(stringValue: string): T | null {
+    if (!this.items || this.items.length === 0) return null;
+    
+    console.log('🔍 Searching for:', stringValue, 'in items:', this.items);
+    
+    return this.items.find(item => {
+      const lov = item as any;
+      
+      // Match against value field
+      if (lov.value === stringValue) {
+        return true;
+      }
+      
+      // Match against description
+      if (lov.description === stringValue) {
+        return true;
+      }
+      
+      // Match against valueAndDescription
+      if (lov.valueAndDescription === stringValue) {
+        return true;
+      }
+      
+      // Match against orderBy
+      if (lov.orderBy === stringValue) {
+        return true;
+      }
+      
+      return false;
+    }) || null;
+  }
+
+  // ✅ UPDATE loadLovData to handle pending string
+  loadLovData(): void {
+    if (this.items && this.items.length > 0) {
+      this.setupPreferencesSubscription();
+      // Check for pending string value
+      if (this.pendingStringValue) {
+        this.applyPendingStringValue();
+      }
+      return;
+    }
+
+    if (this.lovType) {
+      this.lovService.getLovData(this.lovType).subscribe(
+        createObserver<ListOfValues[]>((data) => {
+          if (this.hasAll) {
+            data.splice(0, 0, this.defaultLov);
+          }
+          this.items = data as unknown as T[];
+          
+          console.log('✅ LOV items loaded:', this.items);
+          
+          // ✅ Apply pending string value if exists
+          if (this.pendingStringValue) {
+            this.applyPendingStringValue();
+          }
+          // Match existing selectedValue
+          else if (this.selectedValue && this.items.length > 0) {
+            const matchedItem = this.findMatchingItem(this.selectedValue);
+            if (matchedItem) {
+              console.log('🔄 Matched value to item:', matchedItem);
+              this.selectedValue = matchedItem;
+              this.selectedItem = matchedItem;
+            }
+          }
+          
+          this.setupPreferencesSubscription();
+        }, 'Lov Data')
+      );
+    }
+  }
+
+  // ✅ ADD THIS METHOD
+  private applyPendingStringValue(): void {
+    if (!this.pendingStringValue) return;
+    
+    console.log('🔄 Applying pending string value:', this.pendingStringValue);
+    const matchedItem = this.findMatchingItemByString(this.pendingStringValue);
+    
+    if (matchedItem) {
+      console.log('✅ Matched pending value to item:', matchedItem);
+      this.selectedValue = matchedItem;
+      this.selectedItem = matchedItem;
+      this.pendingStringValue = null;
+    } else {
+      console.warn('⚠️ Could not match pending value:', this.pendingStringValue);
+    }
+  }
+
+  // Keep your existing findMatchingItem for object matching
+  private findMatchingItem(value: T): T | null {
+    if (!this.items || this.items.length === 0) return null;
+    
+    return this.items.find(item => {
+      const itemLov = item as any;
+      const valueLov = value as any;
+      
+      if (itemLov.value && valueLov.value) {
+        return itemLov.value === valueLov.value;
+      }
+      if (itemLov.orderBy && valueLov.orderBy) {
+        return itemLov.orderBy === valueLov.orderBy;
+      }
+      if (itemLov.valueAndDescription && valueLov.valueAndDescription) {
+        return itemLov.valueAndDescription === valueLov.valueAndDescription;
+      }
+      
+      return item === value;
+    }) || null;
+  }
+}
+```
+
+## **Why this happens:**
+
+Your API returns:
+```json
+{
+  "greenSustainableFlag": "ESG Pure Player"  // ← Just a string
+}
+```
+
+But your LOV items are:
+```json
+[
+  { "value": "ESG", "description": "ESG Pure Player", "valueAndDescription": "ESG - ESG Pure Player", ... },
+  { "value": "YES", "description": "Yes", ... }
+]
+```
+
+So you need to **match the string** `"ESG Pure Player"` to the **description field** of the LOV object.
+
+## **Alternative: Fix at the backend**
+
+If possible, ask the backend team to return the **full LOV object** instead of just a string:
+
+```json
+{
+  "greenSustainableFlag": {
+    "value": "ESG",
+    "description": "ESG Pure Player",
+    "valueAndDescription": "ESG - ESG Pure Player"
+  }
+}
+```
+
+This would make it work exactly like `productType` does! But the above frontend solution will work with the current string response. 🎯
+
+
+
+
 const form = context.form || {};
 const selectedType = form?.task_type?.value || "";
 
