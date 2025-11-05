@@ -1,3 +1,136 @@
+Perfect! Now I see the pattern. The `OptionsParentBase` handles arrays for multi-select. For your **single-select dropdown**, you need similar logic but for a **single value** instead of an array.
+
+## **Final Simple Solution:**
+
+Update your single-select dropdown's `writeValue` method to match this pattern:
+
+```typescript
+override writeValue(value: any): void {
+  console.log('🔽 writeValue called with:', value, 'type:', typeof value);
+  
+  if (!value) {
+    this.selectedValue = null;
+    this.selectedItem = null;
+    return;
+  }
+
+  // If value is a string, we need to find the matching LOV object
+  if (typeof value === 'string') {
+    console.log('🔍 Value is string, need to find matching item');
+    
+    // If items are loaded, find the match now
+    if (this.items && this.items.length > 0) {
+      const matchedItem = this.findMatchingItemByString(value);
+      if (matchedItem) {
+        console.log('✅ Found matching item:', matchedItem);
+        this.selectedValue = matchedItem;
+        this.selectedItem = matchedItem;
+      } else {
+        console.warn('⚠️ No match found, storing as pending');
+        this.pendingStringValue = value;
+      }
+    } else {
+      // Items not loaded yet, store for later
+      console.log('⏳ Items not loaded, storing pending value');
+      this.pendingStringValue = value;
+    }
+  } 
+  // If value is already an object (LOV), use it directly
+  else {
+    console.log('✅ Value is object, setting directly');
+    this.selectedValue = value;
+    this.selectedItem = value;
+  }
+}
+
+// Helper method to find LOV item by string value
+private findMatchingItemByString(stringValue: string): T | null {
+  if (!this.items || this.items.length === 0) return null;
+  
+  return this.items.find(item => {
+    const lov = item as any;
+    // Match against common LOV fields
+    return lov.value === stringValue || 
+           lov.description === stringValue || 
+           lov.valueAndDescription === stringValue;
+  }) || null;
+}
+
+// Store pending string value when items aren't loaded yet
+private pendingStringValue: string | null = null;
+
+// Apply pending value after items load
+private applyPendingStringValue(): void {
+  if (!this.pendingStringValue) return;
+  
+  console.log('🔄 Applying pending string value:', this.pendingStringValue);
+  const matchedItem = this.findMatchingItemByString(this.pendingStringValue);
+  
+  if (matchedItem) {
+    console.log('✅ Matched pending value:', matchedItem);
+    this.selectedValue = matchedItem;
+    this.selectedItem = matchedItem;
+    this.pendingStringValue = null;
+  }
+}
+```
+
+## **Update `loadLovData` to apply pending value:**
+
+```typescript
+loadLovData(): void {
+  if (this.items && this.items.length > 0) {
+    // Items already loaded
+    if (this.pendingStringValue) {
+      this.applyPendingStringValue();
+    }
+    this.setupPreferencesSubscription();
+    return;
+  }
+
+  if (this.lovType) {
+    this.lovService.getLovData(this.lovType).subscribe(
+      createObserver<ListOfValues[]>((data) => {
+        if (this.hasAll) {
+          data.splice(0, 0, this.defaultLov);
+        }
+        this.items = data as unknown as T[];
+        
+        console.log('✅ LOV items loaded:', this.items.length, 'items');
+        
+        // Apply pending string value if exists
+        if (this.pendingStringValue) {
+          this.applyPendingStringValue();
+        }
+        
+        this.setupPreferencesSubscription();
+      }, 'Lov Data')
+    );
+  }
+}
+```
+
+---
+
+## **Summary of the pattern:**
+
+| Multi-Select (OptionsParentBase) | Your Single-Select |
+|----------------------------------|-------------------|
+| Handles **array** of values | Handles **single** value |
+| `obj[0]` checks first item type | Check `typeof value` directly |
+| Creates `OptionInfo` array | Sets `selectedValue` directly |
+| String → finds in items | String → finds matching LOV |
+| Object → uses directly | Object → uses directly |
+
+The key insight from `OptionsParentBase`:
+- **String values** need to be matched against loaded items
+- **Object values** can be used directly
+- This matches exactly what you're experiencing!
+
+This is the minimal, clean solution that follows the same pattern as your working multi-select dropdown! 🎯
+
+
+
 okapi
 
 controller.cs
