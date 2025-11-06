@@ -1,4 +1,40 @@
+markControlsAsTouchedAndDirty(formGroup: FormGroup, ...controlNames: string[]): void {
+  controlNames.forEach(name => {
+    const control = formGroup.get(name);
+    if (control) {
+      control.markAsTouched();
+      control.markAsDirty();
+    } else {
+      console.warn(`Control '${name}' not found in form group`);
+    }
+  });
+}
+Usage:
+// For keyDetails
+this.markControlsAsTouchedAndDirty(
+  this.keyDetailsFormGroup,
+  'client',
+  'opportunityTitle',
+  'opportunityDescription',
+  'productType'
+);
 
+// For lifecycle
+this.markControlsAsTouchedAndDirty(
+  this.lifeCycleFormGroup,
+  'AdditionalComments'
+);
+
+// For participants
+this.markControlsAsTouchedAndDirty(
+  this.participantsFormGroup,
+  'oppParticipants'
+);
+
+// Update validity for all at once
+this.keyDetailsFormGroup.updateValueAndValidity();
+this.lifeCycleFormGroup.updateValueAndValidity();
+this.participantsFormGroup.updateValueAndValidity();
 Based on the multi-select pattern, here are the exact changes you need to make in your single-select dropdown:
 
 ## **Add `writeValue` method after the constructor:**
