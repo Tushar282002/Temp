@@ -30,15 +30,52 @@ public class ThemesFieldManager : InteractionFieldManagerBase
 
     public override void SetupVMValidationTriggers(InteractionEditViewModel vm)
     {
-        // Validate Themes on themes change (only when invalid)
-        var themesChanged = Observable.FromEventPattern(
-            h => vm.ThemesChanged += h, 
-            h => vm.ThemesChanged -= h)
+        // Watch for changes in ThemesViewModel.SelectedItems
+        IObservable<Unit> themesViewModelChanged = null;
+        if (vm.ThemesViewModel != null)
+        {
+            themesViewModelChanged = vm.WhenAny(
+                x => x.ThemesViewModel.SelectedItems,
+                x => x.Value)
+                .Select(_ => Unit.Default);
+        }
+
+        // Watch for changes in SelectedThemes
+        var selectedThemesChanged = vm.WhenAny(
+            x => x.SelectedThemes,
+            x => x.Value)
             .Select(_ => Unit.Default);
 
+        // Watch for changes in Products (since either Theme OR Product satisfies the requirement)
+        IObservable<Unit> productsChanged = null;
+        if (vm.ProductSelectionViewModel != null)
+        {
+            productsChanged = vm.WhenAny(
+                x => x.ProductSelectionViewModel.SelectedProducts,
+                x => x.Value)
+                .Select(_ => Unit.Default);
+        }
+
+        // Combine all change observables
+        var allChanges = new List<IObservable<Unit>>();
+        
+        if (themesViewModelChanged != null)
+            allChanges.Add(themesViewModelChanged);
+        
+        allChanges.Add(selectedThemesChanged);
+        
+        if (productsChanged != null)
+            allChanges.Add(productsChanged);
+
+        var combinedChanges = allChanges.Count > 1 
+            ? allChanges.Aggregate((a, b) => a.Merge(b))
+            : allChanges.First();
+
+        // Subscribe to changes and validate
         RegisterForDispose(
-            themesChanged
-                .Where(_ => vm.GetErrors("ThemesViewModel").Cast<object>().Any())
+            combinedChanges
+                .Throttle(TimeSpan.FromMilliseconds(50))
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .Subscribe(_ => ValidateVM(vm))
         );
     }
@@ -50,20 +87,34 @@ public class ThemesFieldManager : InteractionFieldManagerBase
             return;
         }
 
-        // Clear existing errors
+        // Clear existing errors first
         vm.RemoveError("ThemesViewModel");
         vm.RemoveError("SelectedThemes");
-        vm.ThemesViewModel?.RemoveError("SelectedThemes");
-        vm.ThemesViewModel?.RemoveError("ThemesViewModel");
+        if (vm.ThemesViewModel != null)
+        {
+            vm.ThemesViewModel.RemoveError("SelectedThemes");
+            vm.ThemesViewModel.RemoveError("ThemesViewModel");
+        }
 
-        var isWithoutTheme = vm.ThemesViewModel != null && 
-            (vm.ThemesViewModel.SelectedItems == null || !vm.ThemesViewModel.SelectedItems.Any());
-        
-        if (isWithoutTheme && vm.IsThemeOrProductMandatory)
+        // Check if theme is selected
+        var hasTheme = vm.ThemesViewModel != null && 
+                       vm.ThemesViewModel.SelectedItems != null && 
+                       vm.ThemesViewModel.SelectedItems.Any();
+
+        // Check if product is selected
+        var hasProduct = vm.ProductSelectionViewModel != null && 
+                         vm.ProductSelectionViewModel.SelectedProducts != null && 
+                         vm.ProductSelectionViewModel.SelectedProducts.Any();
+
+        // Only show error if BOTH theme and product are missing AND it's mandatory
+        if (!hasTheme && !hasProduct && vm.IsThemeOrProductMandatory)
         {
             const string errorMessage = "Please select a Theme or a Product";
             vm.AddError("ThemesViewModel", errorMessage);
-            vm.ThemesViewModel.AddError("SelectedThemes", errorMessage);
+            if (vm.ThemesViewModel != null)
+            {
+                vm.ThemesViewModel.AddError("SelectedThemes", errorMessage);
+            }
         }
     }
 
@@ -81,4 +132,4 @@ public class ThemesFieldManager : InteractionFieldManagerBase
     }
 
     #endregion
-                                     }
+}
