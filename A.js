@@ -1,3 +1,27 @@
+if (vm.ThemesViewModel != null && vm.ThemesViewModel.CustomTags != null)
+    {
+        // Deselect all tags first
+        foreach (var tag in vm.ThemesViewModel.CustomTags)
+        {
+            tag.IsSelected = false;
+        }
+        
+        // Then select only the ones that should be selected
+        if (vm.SelectedThemes != null && vm.SelectedThemes.Any())
+        {
+            foreach (var themeName in vm.SelectedThemes)
+            {
+                var tag = vm.ThemesViewModel.CustomTags.FirstOrDefault(t => t.Name == themeName);
+                if (tag != null)
+                {
+                    tag.IsSelected = true;
+                }
+            }
+        }
+
+
+
+
 [InteractionFieldManagerMetadata(Order = 19)]
 public class ThemesFieldManager : InteractionFieldManagerBase
 {
