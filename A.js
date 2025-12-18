@@ -1,3 +1,65 @@
+You're right, let me modify the existing code minimally:
+public override void SaveVMState(InteractionEditViewModel vm, InteractionModel interaction)
+{
+    vm.RefreshSelectedThemes();
+    
+    // For RM: always save current selection (even if empty to clear database)
+    // For others: keep original behavior
+    if (_permissionService.ActiveBusinessArea.IsRmBusinessArea())
+    {
+        interaction.Themes = vm.SelectedThemes ?? new List<string>();
+    }
+    else
+    {
+        interaction.Themes = vm.SelectedThemes;
+    }
+    
+    if (interaction.AttendeeTypes == null) 
+    { 
+        interaction.AttendeeTypes = new List<string>(); 
+    }
+    
+    interaction.AttendeeTypes = interaction.GetAllAttendeeTypes(_permissionService.ActiveBusinessArea);
+}
+And for Products:
+public override void SaveVMState(InteractionEditViewModel vm, InteractionModel interaction)
+{
+    if (vm.ProductSelectionViewModel != null)
+    {
+        // For RM: always save current selection (even if empty to clear database)
+        if (_permissionService.ActiveBusinessArea.IsRmBusinessArea())
+        {
+            interaction.DeskProducts = vm.ProductSelectionViewModel.SelectedProducts != null
+                ? vm.ProductSelectionViewModel.SelectedProducts.ToList()
+                : new List<Product>();
+        }
+        else
+        {
+            // Original behavior for other business areas
+            interaction.DeskProducts = vm.ProductSelectionViewModel.SelectedProducts != null
+                ? vm.ProductSelectionViewModel.SelectedProducts.ToList()
+                : new List<Product>();
+        }
+    }
+}
+Actually, looking at products - the behavior is the same for both. So you can keep it simple:
+public override void SaveVMState(InteractionEditViewModel vm, InteractionModel interaction)
+{
+    if (vm.ProductSelectionViewModel != null)
+    {
+        interaction.DeskProducts = vm.ProductSelectionViewModel.SelectedProducts != null
+            ? vm.ProductSelectionViewModel.SelectedProducts.ToList()
+            : new List<Product>();
+    }
+}
+The key change is only in Themes where we ensure empty list for RM business area
+
+
+
+
+
+
+
 if (vm.ThemesViewModel != null && vm.ThemesViewModel.CustomTags != null)
     {
         // Deselect all tags first
