@@ -1,3 +1,168 @@
+import { Component, computed, inject, Input, signal, ViewChild, ViewEncapsulation } from '@angular/core';
+import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
+import { MatInputModule } from '@angular/material/input';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatTooltipModule } from '@angular/material/tooltips';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { map, Observable } from 'rxjs';
+import { SearchAutoCompleteComponent } from '../abstractions/search-autocomplete.component';
+import { createControlValueAccessorProviders } from '../abstractions/control-value-accessor-base';
+import { RestApiConstant } from '../../constants/rest-api.constants';
+import { searchEmployeesForVisibilityRequestModel } from '../../core/models/request/search-employees-for-visibility-request.model';
+
+// Define your response interface based on your API
+export interface ISearchEmployeeResponse {
+  employeeId?: string;
+  employeeName?: string;
+  email?: string;
+  department?: string;
+  displayValue?: string;
+}
+
+@Component({
+  selector: 'app-search-employees',
+  imports: [
+    CommonModule,
+    MatAutocompleteModule, 
+    MatInputModule, 
+    FormsModule, 
+    MatChipsModule, 
+    MatTooltipModule,
+    MatCheckboxModule
+  ],
+  templateUrl: './search-employees.component.html',
+  styleUrl: './search-employees.component.scss',
+  encapsulation: ViewEncapsulation.Emulated,
+  providers: createControlValueAccessorProviders(SearchEmployeesComponent)
+})
+export class SearchEmployeesComponent extends SearchAutoCompleteComponent<ISearchEmployeeResponse> {
+  @ViewChild(MatAutocompleteTrigger, { static: false })
+  private readonly autocompleteTrigger!: MatAutocompleteTrigger;
+
+  private readonly httpClient = inject(HttpClient);
+
+  @Input() allowedEmployeeCount = 0; // 0 means unlimited
+
+  override inputPlaceholder = 'Search by employee name';
+  override displayMemberPath = '(employeeName)';
+
+  readonly hideChip = computed(() => {
+    if (this.isDisabled()) {
+      return true;
+    } else {
+      return this.selectedItemsInternal().length <= 0;
+    }
+  });
+
+  readonly hideInput = computed(() => {
+    if (this.isDisabled()) {
+      return true;
+    } else {
+      const count = this.allowedEmployeeCount ?? 0;
+      return count > 0 && this.selectedItemsInternal().length >= count;
+    }
+  });
+
+  override ngOnInit(): void {
+    super.ngOnInit();
+    this.searchItemsCallback = this.searchEmployees;
+    this.isSearchInProgress = false;
+  }
+
+  searchEmployees = (searchQuery: string): Observable<ISearchEmployeeResponse[]> => {
+    let searchRequest: searchEmployeesForVisibilityRequestModel = {
+      searchText: searchQuery
+    };
+
+    return this.httpClient.post<ISearchEmployeeResponse[]>(RestApiConstant.searchEmployees, searchRequest)
+      .pipe(map((raw) => {
+        return raw?.map(item => ({
+          ...item,
+          displayValue: item.displayValue || `${item.employeeName} (${item.email})`
+        }));
+      }));
+  };
+
+  override onInputChange(event: Event): void {
+    super.onInputChange(event);
+  }
+
+  searchOnClick(): void {
+    this.autocompleteTrigger.openPanel();
+    if (!this.isSearchInProgress && this.searchQuery && this.searchQuery().length >= 3) {
+      this.updateOptions(this.searchQuery(), () => ({}));
+    }
+  }
+
+  onKeyup(event: KeyboardEvent): void {
+    const key = event.key;
+    if (key === 'Escape') {
+      this.closeAutocomplete();
+      return;
+    }
+    if (key === 'Enter' && event.ctrlKey) {
+      this.searchOnClick();
+    }
+  }
+
+  private closeAutocomplete(): void {
+    this.autocompleteTrigger?.closePanel?.();
+  }
+
+  isOptionSelected(option: ISearchEmployeeResponse): boolean {
+    return this.selectedItemsInternal().some(
+      item => item.objectAsString === this.getObjectAsString(option)
+    );
+  }
+
+  onCheckboxChange(option: ISearchEmployeeResponse, isChecked: boolean): void {
+    const currentItems = this.selectedItemsInternal();
+    const optionString = this.getObjectAsString(option);
+    
+    if (isChecked) {
+      const limit = this.allowedEmployeeCount;
+      if (limit > 0 && currentItems.length >= limit) {
+        return;
+      }
+
+      const exists = currentItems.some(item => item.objectAsString === optionString);
+      if (!exists) {
+        const optionInfo = this.toOptionInfo(option);
+        const updatedItems = [...currentItems, optionInfo];
+        this.selectedItemsInternal.set(updatedItems);
+      }
+    } else {
+      const updatedItems = currentItems.filter(item => item.objectAsString !== optionString);
+      this.selectedItemsInternal.set(updatedItems);
+    }
+  }
+
+  override removeSelectedItem(item: any): void {
+    const updatedItems = this.selectedItemsInternal().filter(
+      selected => selected.objectAsString !== item.objectAsString
+    );
+    this.selectedItemsInternal.set(updatedItems);
+  }
+
+  private toOptionInfo(employee: ISearchEmployeeResponse): any {
+    return {
+      displayValue: employee.displayValue || `${employee.employeeName} (${employee.email})`,
+      value: employee,
+      objectAsString: this.getObjectAsString(employee),
+      isSelected: false
+    };
+  }
+
+  private getObjectAsString(employee: ISearchEmployeeResponse): string {
+    return JSON.stringify(employee);
+  }
+    }
+
+
+
 .ts file 
 import { Component, computed, inject, Input, signal, ViewChild, ViewEncapsulation } from '@angular/core';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
