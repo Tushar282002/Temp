@@ -15,11 +15,15 @@ import { searchEmployeesForVisibilityRequestModel } from '../../core/models/requ
 
 // Define your response interface based on your API
 export interface ISearchEmployeeResponse {
-  employeeId?: string;
-  employeeName?: string;
-  email?: string;
-  department?: string;
+  id?: string;
+  uid?: string;
+  teamId?: string;
+  firstName?: string;
+  lastName?: string;
+  emailAddress?: string;
+  fullName?: string;
   displayValue?: string;
+  // Add other fields as needed but they won't be displayed
 }
 
 @Component({
@@ -47,7 +51,7 @@ export class SearchEmployeesComponent extends SearchAutoCompleteComponent<ISearc
   @Input() allowedEmployeeCount = 0; // 0 means unlimited
 
   override inputPlaceholder = 'Search by employee name';
-  override displayMemberPath = '(employeeName)';
+  override displayMemberPath = 'displayValue';
 
   readonly hideChip = computed(() => {
     if (this.isDisabled()) {
@@ -77,12 +81,19 @@ export class SearchEmployeesComponent extends SearchAutoCompleteComponent<ISearc
       searchText: searchQuery
     };
 
-    return this.httpClient.post<ISearchEmployeeResponse[]>(RestApiConstant.searchEmployees, searchRequest)
+    return this.httpClient.post<any[]>(RestApiConstant.searchEmployees, searchRequest)
       .pipe(map((raw) => {
-        return raw?.map(item => ({
-          ...item,
-          displayValue: item.displayValue || `${item.employeeName} (${item.email})`
-        }));
+        return raw?.map(item => {
+          const displayValue = `${item.firstName || ''} ${item.lastName || ''} (${item.emailAddress || ''})`.trim();
+          return {
+            id: item.id,
+            uid: item.uid,
+            firstName: item.firstName,
+            lastName: item.lastName,
+            emailAddress: item.emailAddress,
+            displayValue: displayValue
+          } as ISearchEmployeeResponse;
+        });
       }));
   };
 
@@ -148,8 +159,9 @@ export class SearchEmployeesComponent extends SearchAutoCompleteComponent<ISearc
   }
 
   private toOptionInfo(employee: ISearchEmployeeResponse): any {
+    const displayValue = `${employee.firstName || ''} ${employee.lastName || ''} (${employee.emailAddress || ''})`.trim();
     return {
-      displayValue: employee.displayValue || `${employee.employeeName} (${employee.email})`,
+      displayValue: displayValue,
       value: employee,
       objectAsString: this.getObjectAsString(employee),
       isSelected: false
@@ -160,6 +172,11 @@ export class SearchEmployeesComponent extends SearchAutoCompleteComponent<ISearc
     return JSON.stringify(employee);
   }
     }
+
+
+
+
+
 
 
 
