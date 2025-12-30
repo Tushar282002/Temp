@@ -1,0 +1,400 @@
+I'll help you implement these three features. Here's the updated code:
+1. Update Search Component TypeScript
+export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteComponent<T> {
+  @ViewChild('searchInput') searchInputElement?: ElementRef<HTMLInputElement>;
+
+  @Input() addInitialItemsCallback?: () => T[];
+  @Input() override displayMemberPath = '(fullName) ((emailAddress))';
+  @Input() override inputPlaceholder: string = 'Search employees...';
+  @Input() noResultsMessage: string = 'No results found in Employee Directory';
+  @Input() minSearchLength: number = 3;
+  
+  // NEW: Input to receive existing employee IDs
+  @Input() existingEmployeeIds: number[] = [];
+
+  @Output() employeeSelected = new EventEmitter<T>();
+  // NEW: Output for uncheck event
+  @Output() employeeUnselected = new EventEmitter<T>();
+
+  private employeeMap = new Map<string, T>();
+  // NEW: Track checked states
+  private checkedEmployees = new Map<string, boolean>();
+
+  showMinLengthMessage = signal<boolean>(false);
+
+  override ngOnInit(): void {
+    super.ngOnInit();
+  }
+
+  ngAfterViewInit(): void {
+    setTimeout(() => {
+      this.filteredOptions.set([]);
+      if (this.searchInputElement) {
+        this.searchInputElement.nativeElement.value = "";
+      }
+    }, 0);
+  }
+
+  override onInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.trim();
+
+    if (value.length === 0) {
+      this.filteredOptions.set([]);
+      this.employeeMap.clear();
+      this.showMinLengthMessage.set(false);
+      return;
+    }
+
+    if (value.length < this.minSearchLength) {
+      this.filteredOptions.set([]);
+      this.employeeMap.clear();
+      this.showMinLengthMessage.set(true);
+      return;
+    }
+
+    this.showMinLengthMessage.set(false);
+
+    if (this.searchItemsCallback) {
+      this.isSearchInProgress = true;
+      console.log('searching for:', value);
+
+      this.searchItemsCallback(value).subscribe({
+        next: (results: T[]) => {
+          console.log('API Response Total Results:', results.length);
+          
+          this.employeeMap.clear();
+
+          // NEW: Filter out employees that already exist in the grid
+          const filteredResults = results.filter(result => {
+            const employeeId = (result as any).id;
+            return !this.existingEmployeeIds.includes(employeeId);
+          });
+
+          const options = filteredResults.map(result => {
+            const displayValue = this.getViewValue(result);
+            const optionInfo = new OptionInfo(result, displayValue);
+            this.employeeMap.set(optionInfo.objectAsString, result);
+            return optionInfo;
+          });
+
+          this.filteredOptions.set(options);
+          this.isSearchInProgress = false;
+          console.log('Options created:', options.length);
+        },
+        error: (error) => {
+          console.error('API Error:', error);
+          this.isSearchInProgress = false;
+          this.filteredOptions.set([]);
+          this.employeeMap.clear();
+        }
+      });
+    }
+  }
+
+  searchOnClick(): void {
+    if (this.searchInputElement) {
+      this.searchInputElement.nativeElement.focus();
+    }
+  }
+
+  onCheckboxChange(option: OptionInfo<T>, event: any): void {
+    event.stopPropagation();
+    
+    const employee = this.employeeMap.get(option.objectAsString);
+    
+    if (employee) {
+      const isChecked = event.checked;
+      
+      console.log('Checkbox changed:', {
+        employee: employee,
+        isChecked: isChecked,
+        email: (employee as any).emailAddress,
+        name: (employee as any).fullName
+      });
+
+      // NEW: Track checked state
+      this.checkedEmployees.set(option.objectAsString, isChecked);
+
+      if (isChecked) {
+        this.employeeSelected.emit(employee);
+      } else {
+        this.employeeUnselected.emit(employee);
+      }
+    }
+  }
+
+  // NEW: Method to check if an option is checked
+  isOptionChecked(option: OptionInfo<T>): boolean {
+    return this.checkedEmployees.get(option.objectAsString) || false;
+  }
+
+  override usingDisplayValue(): string => {
+    return '';
+  }
+}
+2. Update Search Component HTML
+<div>
+  <div [class]="isInvalid ? 'form-group' : ''">
+    <div
+      [class]="{
+        'input-group': true,
+        'input-search-box': true,
+        'is-invalid': (isInvalid && validationType === 2),
+        'soft-is-invalid': (isInvalid && validationType === 1)
+      }">
+      <input
+        #searchInput
+        aria-label="Search Employee"
+        class="input-text form-control"
+        [matAutocomplete]="autoComplete"
+        (input)="onInputChange($event)"
+        [placeholder]="inputPlaceholder"
+        [readonly]="isSearchInProgress"
+        style="background-color:#FAFDFC;">
+
+      <div class="input-group-append" (click)="searchOnClick()">
+        <span class="input-group-text no-border-left" title="Search">
+          <i *ngIf="isSearchInProgress" class="once-loader once-loader-xs"></i>
+          <i *ngIf="!isSearchInProgress" class="icon icon-search"></i>
+        </span>
+      </div>
+    </div>
+
+    <mat-autocomplete
+      #autoComplete="matAutocomplete"
+      [displayWith]="usingDisplayValue">
+      <div class="autocomplete-wrapper">
+        @for (option of filteredOptions(); track option.objectAsString) {
+          <mat-option
+            [value]="option"
+            matTooltipClass="tooltip"
+            [matTooltip]="option.displayValue"
+            class="option-style-truncate">
+            <mat-checkbox
+              [checked]="isOptionChecked(option)"
+              (change)="onCheckboxChange(option, $event)"
+              (click)="$event.stopPropagation()"
+              class="option-checkbox">
+              {{ option.displayValue }}
+            </mat-checkbox>
+          </mat-option>
+        }
+      </div>
+
+      <!-- No Results Message -->
+      <mat-option 
+        *ngIf="filteredOptions()?.length === 0 && searchInput.value && searchInput.value.length >= minSearchLength && !isSearchInProgress" 
+        disabled>
+        {{ noResultsMessage }}
+      </mat-option>
+    </mat-autocomplete>
+
+    <div
+      *ngIf="isInvalid && showValidationMessage"
+      [class]="{
+        'crs-form-error-feedback': (isInvalid && validationType === 2),
+        'soft-invalid-feedback': (isInvalid && validationType === 1)
+      }">
+      <i class="icon icon-error"></i>
+      {{ errorMessage }}
+    </div>
+  </div>
+</div>
+3. Update Visibility Component TypeScript
+export class OpportunityVisibilityComponent {
+  private readonly employeeService = inject(EmployeeService);
+  private readonly userService = inject(UserService);
+  private readonly _permissionService = inject(PermissionService);
+  private readonly _opportunityReadService = inject(OpportunityReadService);
+  private readonly _dialogRef = inject(MatDialogRef<OpportunityVisibilityComponent>);
+
+  colDefs: ColDef[] = [
+    { field: nameof<IAccessList>("employeeName"), headerName: 'NAME' },
+    { field: nameof<IAccessList>("teamName"), headerName: "TEAM NAME" },
+    { field: nameof<IAccessList>("visibilityRules"), headerName: "VISIBILITY RULES" },
+    { field: nameof<IAccessList>("addedBy"), headerName: "ADDED BY" },
+    {
+      field: nameof<IAccessList>("isManuallyAdded"),
+      sort: 'desc',
+      suppressHeaderFilterButton: false,
+      headerComponentParams: {},
+      innerHeaderComponent: AgGridIconHeaderTemplate,
+      innerHeaderComponentParams: { iconName: "bin-outline", isSvg: true },
+      cellClass: 'text-center',
+      cellRendererSelector: (cellParams: ICellRendererParams<IAccessList, boolean, any>) =>
+        cellParams.value
+          ? {
+              component: AgGridCellButtonTemplate,
+              params: {
+                iconName: "icon-close",
+                style: 'fw-bold fs-1 danger',
+                onClick: (rowData: IAccessList) => this.deleteRow(rowData)
+              }
+            }
+          : undefined
+    }
+  ];
+
+  rowData = signal<IAccessList[]>([]);
+  bnpTheme = agGridTheme();
+  activeBusinessLine = getBusinessAreaName(this._permissionService.activeBusinessArea);
+  opportunityType = '';
+  privacyLevel = '';
+  visibilityMessage = '';
+  manuallyAddedEmployee = model<Employee[]>();
+
+  // NEW: Computed signal for existing employee IDs
+  existingEmployeeIds = computed(() => {
+    return this.rowData().map(row => row.id);
+  });
+
+  ngOnInit(): void {
+    this._opportunityReadService.opportunityObservable.subscribe((opportunity: OpportunityModel) => {
+      this.opportunityType = opportunity.opportunityType ?? '';
+      this.privacyLevel = opportunity.privacyLevel ?? '';
+      this.visibilityMessage = this.buildVisibilityMessage();
+    });
+  }
+
+  // NEW: Updated method to handle employee selection
+  onEmployeeSelected(employee: Employee): void {
+    const currentData = this.rowData();
+    
+    // Check if employee already exists
+    const exists = currentData.some(row => row.id === employee.id);
+    if (exists) {
+      console.log('Employee already exists in grid');
+      return;
+    }
+
+    const newEntry: IAccessList = {
+      id: employee.id,
+      employeeName: employee.fullName,
+      teamName: (employee as any).teamName || '', // Add team name if available
+      visibilityRules: "Manually Added",
+      addedBy: this.userService.GetUserFullName(),
+      isManuallyAdded: true
+    };
+
+    this.rowData.set([newEntry, ...currentData]);
+  }
+
+  // NEW: Method to handle employee unselection
+  onEmployeeUnselected(employee: Employee): void {
+    const currentData = this.rowData();
+    const filtered = currentData.filter(row => row.id !== employee.id);
+    this.rowData.set(filtered);
+  }
+
+  private deleteRow(accessToRemove?: IAccessList) {
+    if (!accessToRemove?.id) {
+      return;
+    }
+    const newArray = this.rowData().filter(al => al.id !== accessToRemove?.id);
+    this.rowData.set(newArray);
+  }
+
+  protected closeDialog() {
+    this._dialogRef.close(false);
+  }
+
+  protected saveList() {
+    // Add your save logic here
+  }
+
+  protected onGridReady() {
+    this._opportunityReadService.GetOpportunityVisibilityList()
+      .subscribe(result => {
+        this.rowData.set(result);
+      });
+  }
+
+  private buildVisibilityMessage(): string {
+    console.log('visibility component receives', this.opportunityType, this.privacyLevel, this.activeBusinessLine);
+
+    let visibilityMessage = '';
+
+    if (this.activeBusinessLine === 'EQD') {
+      const key = `${this.activeBusinessLine}${this.opportunityType}${this.privacyLevel}`;
+      visibilityMessage = (GlobalConstants as Record<string, string>)[key] ?? 'Visibility message not found';
+    } else {
+      visibilityMessage = `This opportunity has been saved with a <b>${this.privacyLevel}</b> privacy level. The users that have visibility to this opportunity are: <br>`;
+
+      if (this.privacyLevel === 'Normal' || this.privacyLevel === 'Sensitive') {
+        const normalSensitiveText = (GlobalConstants as Record<string, string>)['NormalSensitive'];
+        visibilityMessage += normalSensitiveText;
+      } else if (this.privacyLevel === 'Privileged') {
+        const privilegedText = (GlobalConstants as Record<string, string>)['Privileged'];
+        visibilityMessage += privilegedText;
+      }
+    }
+
+    return visibilityMessage;
+  }
+
+  searchEmployeesForVisibility(searchTerm: string): Observable<Employee[]> {
+    return this.employeeService.searchEmployeesForVisibility(searchTerm);
+  }
+
+  addCurrentUserAsParticipant(): Employee[] {
+    return [{
+      emailAddress: this.userService.context?.emailAddress,
+    }];
+  }
+
+  closePage(): void {
+    this._dialogRef.close();
+  }
+}
+4. Update Visibility Component HTML
+<div class="d-flex flex-column visibility-container">
+  <div class="custom-header px-3 d-flex justify-content-between">
+    <span>Opportunity Visibility</span>
+    <button class="btn btn-link-secondary" (click)="closePage()">
+      <i class="icon icon-close"></i>
+    </button>
+  </div>
+
+  <div class="p-3 flex-grow-1 d-flex flex-column">
+    <p class="h5 fw-bold">Visibility Guidelines</p>
+    <p [innerHTML]="visibilityMessage"></p>
+
+    <div class="form-row">
+      <div class="col-12">
+        <app-employee-multi-select-search
+          id="OptyVisibility"
+          [searchItemsCallback]="searchEmployeesForVisibility.bind(this)"
+          [addInitialItemsCallback]="addCurrentUserAsParticipant.bind(this)"
+          formControlName="OptyVisibility"
+          inputPlaceholder="Search for an Employee to add to the list"
+          [existingEmployeeIds]="existingEmployeeIds()"
+          (employeeSelected)="onEmployeeSelected($event)"
+          (employeeUnselected)="onEmployeeUnselected($event)"
+          displayMemberPath="(fullName) ((emailAddress))"
+          noResultsMessage="No results found in Employee Directory">
+        </app-employee-multi-select-search>
+      </div>
+    </div>
+
+    <ag-grid-angular 
+      class="flex-grow-1" 
+      [autoSizeStrategy]="{type: 'fitGridWidth', columnLimits: [{colId: 'isManuallyAdded', minWidth: 90, maxWidth: 100}]}"
+      [columnDefs]="colDefs" 
+      [rowData]="rowData()" 
+      (gridReady)="onGridReady()" 
+      [theme]="bnpTheme">
+    </ag-grid-angular>
+  </div>
+
+  <div class="d-flex justify-content-end p-3">
+    <button class="btn btn-outline-primary font-weight-bold" (click)="closeDialog()">Cancel</button>
+    <button class="btn btn-primary font-weight-bold" (click)="saveList()">Save</button>
+  </div>
+</div>
+Key Changes Summary:
+Checkbox Selection: Added onEmployeeSelected to add employees to grid with all required fields
+Checkbox Unselection: Added onEmployeeUnselected to remove employees from grid when unchecked
+Filter Existing IDs: Added existingEmployeeIds input that filters out employees already in the grid from search results
+Track Checkbox State: Added checkedEmployees Map to maintain checkbox states across searches
+The solution ensures employees can only be added once, checkboxes reflect the current state, and unchecking removes them from the grid.
