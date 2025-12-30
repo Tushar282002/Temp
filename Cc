@@ -1,0 +1,569 @@
+Yes, that's an excellent idea! This follows the Single Responsibility Principle and makes the search component truly reusable. The search component should only handle searching and selection, while the parent component (visibility) handles the business logic of adding to the grid.
+Here's the refactored solution:
+1. Simplified Search Component (TypeScript)
+employee-multi-select-search.component.ts
+import { NgIf } from '@angular/common';
+import { Component, Input, ViewEncapsulation, signal, ViewChild, ElementRef, Output, EventEmitter } from '@angular/core';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { MatSelectModule, MatSelect } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatOptionModule } from '@angular/material/core';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { SearchAutoCompleteComponent } from '../abstractions/search-autocomplete.component';
+import { createControlValueAccessorProviders } from '../abstractions/control-value-accessor-base';
+import { OptionInfo } from '../abstractions/options-parent-base';
+
+@Component({
+  selector: 'app-employee-multi-select-search',
+  standalone: true,
+  imports: [
+    MatSelectModule,
+    MatFormFieldModule,
+    MatOptionModule,
+    MatCheckboxModule,
+    NgIf,
+    FormsModule,
+    ReactiveFormsModule,
+    MatTooltipModule
+  ],
+  templateUrl: './employee-multi-select-search.component.html',
+  styleUrls: ['./employee-multi-select-search.component.scss'],
+  encapsulation: ViewEncapsulation.None,
+  providers: createControlValueAccessorProviders(EmployeeMultiSelectSearchComponent)
+})
+export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteComponent<T> {
+  
+  @ViewChild('searchInput') searchInputElement?: ElementRef<HTMLInputElement>;
+  @ViewChild('matSelectRef') matSelectRef?: MatSelect;
+  
+  //#region Input Properties
+  
+  /**
+   * Callback to add initial items when component loads
+   */
+  @Input() addInitialItemsCallback?: () => T[];
+  
+  /**
+   * Display format for items - use property names from your employee object
+   */
+  @Input() override displayMemberPath = '{fullName} ({emailAddress})';
+  
+  /**
+   * Placeholder text for the search input
+   */
+  @Input() override inputPlaceholder: string = 'Search employees...';
+  
+  /**
+   * Message to show when no results are found
+   */
+  @Input() noResultsMessage: string = 'No results found in Employee Directory';
+  
+  //#endregion
+  
+  //#region Output Events
+  
+  /**
+   * Event emitted when user clicks checkbox on an option
+   * Emits the employee object for parent to handle
+   */
+  @Output() employeeSelected = new EventEmitter<T>();
+  
+  //#endregion
+  
+  //#region Private Properties
+  
+  // Map to store original objects by their string representation
+  private employeeMap = new Map<string, T>();
+  
+  //#endregion
+  
+  //#region Lifecycle Hooks
+  
+  override ngOnInit(): void {
+    super.ngOnInit();
+  }
+  
+  ngAfterViewInit(): void {
+    setTimeout(() => {
+      this.filteredOptions.set([]);
+      if (this.searchInputElement) {
+        this.searchInputElement.nativeElement.value = '';
+      }
+    }, 0);
+    
+    if (this.addInitialItemsCallback) {
+      const initialItems = this.addInitialItemsCallback().map(
+        result => new OptionInfo(result, this.getViewValue(result))
+      );
+      this.selectedItemsInternal.set(initialItems);
+      this.onChange(this.selectedItems());
+    }
+  }
+  
+  //#endregion
+  
+  //#region Input Handling
+  
+  /**
+   * Handle input changes for search
+   */
+  onSearchInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.trim();
+    
+    if (value.length === 0) {
+      this.filteredOptions.set([]);
+      this.employeeMap.clear();
+      return;
+    }
+    
+    // Call the search callback
+    if (this.searchItemsCallback) {
+      this.isSearchInProgress = true;
+      this.searchItemsCallback(value).subscribe({
+        next: (results: T[]) => {
+          this.employeeMap.clear(); // Clear previous mappings
+          
+          const options = results.map(result => {
+            const optionInfo = new OptionInfo(result, this.getViewValue(result));
+            // Store the original employee object
+            this.employeeMap.set(optionInfo.objectAsString, result);
+            return optionInfo;
+          });
+          
+          this.filteredOptions.set(options);
+          this.isSearchInProgress = false;
+        },
+        error: () => {
+          this.isSearchInProgress = false;
+          this.filteredOptions.set([]);
+          this.employeeMap.clear();
+        }
+      });
+    }
+  }
+  
+  /**
+   * Handle search icon click
+   */
+  searchOnClick(): void {
+    if (this.matSelectRef) {
+      this.matSelectRef.open();
+    }
+  }
+  
+  //#endregion
+  
+  //#region Selection Methods
+  
+  /**
+   * Handle checkbox click - just emit the employee, let parent decide what to do
+   */
+  onCheckboxChange(option: OptionInfo<T>, isChecked: boolean): void {
+    if (isChecked) {
+      const employee = this.employeeMap.get(option.objectAsString);
+      if (employee) {
+        // Simply emit the selected employee - parent will handle the logic
+        this.employeeSelected.emit(employee);
+      }
+    }
+    // Note: We don't handle unchecking because parent manages the grid state
+  }
+  
+  /**
+   * Check if an option should be disabled (handled by parent)
+   * This can be used if parent wants to disable already-added employees
+   */
+  isOptionDisabled(option: OptionInfo<T>): boolean {
+    // Parent can provide logic via Input if needed
+    return false;
+  }
+  
+  //#endregion
+}
+2. Simplified Search Component HTML
+employee-multi-select-search.component.html
+<div [class]="isInvalid ? 'form-group' : ''">
+  <mat-form-field 
+    appearance="outline" 
+    class="employee-select-container"
+    [class]="{
+      'is-invalid': (isInvalid && validationType === 2), 
+      'soft-is-invalid': (isInvalid && validationType === 1)
+    }">
+    
+    <mat-select 
+      #matSelectRef
+      [placeholder]="inputPlaceholder"
+      [disabled]="isDisabled()"
+      panelClass="employee-select-panel">
+      
+      <!-- Search Input inside dropdown -->
+      <div class="input-group input-search-box" (click)="$event.stopPropagation()">
+        <input 
+          #searchInput
+          type="text" 
+          (input)="onSearchInputChange($event)" 
+          class="form-control search-input" 
+          [placeholder]="inputPlaceholder"
+          style="background-color:#FAFDFC;">
+        
+        <div class="input-group-append">
+          <span class="input-group-text no-border-left" title="Search">
+            <i *ngIf="isSearchInProgress" class="once-loader once-loader-xs"></i>
+            <i *ngIf="!isSearchInProgress" class="icon icon-search"></i>
+          </span>
+        </div>
+      </div>
+      
+      <!-- Options with checkboxes -->
+      <div class="options-container">
+        @for (option of filteredOptions(); track option.objectAsString) {
+          <mat-option 
+            [value]="option"
+            [disabled]="isOptionDisabled(option)"
+            class="employee-option"
+            (click)="$event.stopPropagation()">
+            <mat-checkbox 
+              [checked]="false"
+              (change)="onCheckboxChange(option, $event.checked)"
+              (click)="$event.stopPropagation()"
+              class="option-checkbox">
+              <span 
+                class="option-text"
+                matTooltipClass="tooltip" 
+                [matTooltip]="option.displayValue">
+                {{ option.displayValue }}
+              </span>
+            </mat-checkbox>
+          </mat-option>
+        }
+      </div>
+      
+      <!-- No Results Message -->
+      @if (filteredOptions()?.length === 0 && searchInput?.value && !isSearchInProgress) {
+        <mat-option disabled class="no-results-option">
+          {{ noResultsMessage }}
+        </mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <!-- Validation Error Message -->
+  <div 
+    *ngIf="isInvalid && showValidationMessage"
+    [class]="{
+      'crm-form-error-feedback': (isInvalid && validationType === 2), 
+      'soft-invalid-feedback': (isInvalid && validationType === 1)
+    }">
+    <i class="icon icon-error"></i>
+    {{ errorMessage }}
+  </div>
+</div>
+3. Updated Visibility Component (All Logic Here)
+opportunity-visibility.component.ts
+export class OpportunityVisibilityComponent {
+  
+  private readonly employeeService = inject(EmployeeService);
+  private readonly userService = inject(UserService);
+  private readonly permissionService = inject(PermissionService);
+  private readonly opportunityReadService = inject(OpportunityReadService);
+  private readonly dialogRef = inject(MatDialogRef<OpportunityVisibilityComponent>);
+
+  colDefs: ColDef[] = [
+    { field: nameof<IAccessList>("employeeName"), headerName: 'NAME' },
+    { field: nameof<IAccessList>("teamName"), headerName: "TEAM NAME" },
+    { field: nameof<IAccessList>("visibilityRules"), headerName: "VISIBILITY RULES" },
+    { field: nameof<IAccessList>("addedBy"), headerName: "ADDED BY" },
+    {
+      field: nameof<IAccessList>("isManuallyAdded"),
+      sort: 'desc',
+      suppressHeaderFilterButton: false,
+      headerComponentParams: {
+        innerHeaderComponent: AgGridIconHeaderTemplate,
+        innerHeaderComponentParams: { iconName: "bin-outline", isSvg: true }
+      },
+      cellClass: 'text-center',
+      cellRendererSelector: (cellParams: ICellRendererParams<IAccessList, boolean, any>) => cellParams.value ? {
+        component: AgGridCellButtonTemplate,
+        params: {
+          iconName: "icon-close",
+          style: 'fw-bold fs-1 danger',
+          onClick: (rowData: IAccessList) => this.deleteRow(rowData)
+        }
+      } : undefined
+    }
+  ];
+
+  rowData = signal<IAccessList[]>([]);
+  bnpTheme = agGridTheme();
+  activeBusinessLine = getBusinessAreaName(this.permissionService.activeBusinessArea);
+  opportunityType = "";
+  privacyLevel = "";
+  visibilityMessage = '';
+
+  ngOnInit(): void {
+    this.opportunityReadService.opportunityObservable.subscribe((opportunity: IOpportunityModel) => {
+      this.opportunityType = opportunity.opportunityType ?? "";
+      this.privacyLevel = opportunity.privacyLevel ?? "";
+      this.visibilityMessage = this.buildVisibilityMessage();
+    });
+  }
+
+  /**
+   * Handle when employee is selected from search dropdown
+   * This is where all the business logic lives
+   */
+  onEmployeeSelected(employee: IBnppParticipant): void {
+    const currentData = this.rowData();
+    
+    // Business Rule 1: Check if employee already exists in grid
+    const exists = currentData.some(item => 
+      item.employeeId === employee.employeeId || 
+      item.emailAddress === employee.emailAddress
+    );
+    
+    if (exists) {
+      // You can show a toast/notification here
+      console.log('Employee already added to the visibility list');
+      // Optionally: this.toastService.warning('Employee already in the list');
+      return;
+    }
+    
+    // Business Rule 2: Validate employee can be added (add any custom rules)
+    if (!this.canAddEmployee(employee)) {
+      console.log('Employee cannot be added due to business rules');
+      // Optionally: this.toastService.error('Cannot add this employee');
+      return;
+    }
+    
+    // Business Rule 3: Create new access list entry with all required data
+    const newEntry: IAccessList = {
+      id: this.generateTempId(),
+      employeeName: employee.fullName,
+      emailAddress: employee.emailAddress,
+      employeeId: employee.employeeId,
+      positionId: employee.positionId,
+      teamName: employee.teamName || '', // Add team info if available from employee object
+      visibilityRules: 'Manually Added',
+      addedBy: `${this.userService.context?.firstName} ${this.userService.context?.lastName}`,
+      addedByEmail: this.userService.context?.emailAddress,
+      addedDate: new Date().toISOString(),
+      isManuallyAdded: true
+    };
+    
+    // Add to grid at the top
+    this.rowData.set([newEntry, ...currentData]);
+    
+    // Optional: Show success message
+    console.log('Employee added successfully:', employee.fullName);
+    // Optionally: this.toastService.success(`${employee.fullName} added to visibility list`);
+  }
+
+  /**
+   * Business rule validation - can this employee be added?
+   * Add any custom validation logic here
+   */
+  private canAddEmployee(employee: IBnppParticipant): boolean {
+    // Example business rules:
+    
+    // Rule 1: Employee must have an email
+    if (!employee.emailAddress) {
+      return false;
+    }
+    
+    // Rule 2: Employee must have a full name
+    if (!employee.fullName || employee.fullName.trim() === '') {
+      return false;
+    }
+    
+    // Rule 3: Can't add yourself (if that's a rule)
+    // if (employee.emailAddress === this.userService.context?.emailAddress) {
+    //   return false;
+    // }
+    
+    // Rule 4: Check maximum number of manually added users
+    const manuallyAddedCount = this.rowData().filter(item => item.isManuallyAdded).length;
+    const MAX_MANUALLY_ADDED = 50; // Example limit
+    if (manuallyAddedCount >= MAX_MANUALLY_ADDED) {
+      console.log(`Cannot add more than ${MAX_MANUALLY_ADDED} users manually`);
+      return false;
+    }
+    
+    // Add more business rules as needed
+    
+    return true;
+  }
+
+  /**
+   * Generate temporary ID for new entries
+   */
+  private generateTempId(): string {
+    return 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  /**
+   * Delete a row from the grid
+   */
+  private deleteRow(accessToRemove?: IAccessList): void {
+    if (!accessToRemove?.id) {
+      return;
+    }
+    
+    // Only allow deleting manually added users
+    if (!accessToRemove.isManuallyAdded) {
+      console.log('Cannot remove system-added users');
+      // Optionally: this.toastService.warning('Cannot remove system-added users');
+      return;
+    }
+    
+    const newArray = this.rowData().filter(al => al.id !== accessToRemove?.id);
+    this.rowData.set(newArray);
+    
+    console.log('Employee removed from visibility list');
+    // Optionally: this.toastService.info('Employee removed from list');
+  }
+
+  protected closeDialog(): void {
+    this.dialogRef.close(false);
+  }
+
+  /**
+   * Save the visibility list
+   */
+  protected saveList(): void {
+    // Get only manually added users
+    const manuallyAddedUsers = this.rowData().filter(item => item.isManuallyAdded);
+    
+    // Validate before saving
+    if (manuallyAddedUsers.length === 0) {
+      console.log('No manually added users to save');
+      // Optionally: this.toastService.warning('Please add at least one employee');
+      return;
+    }
+    
+    // Prepare data for API
+    const dataToSave = manuallyAddedUsers.map(user => ({
+      employeeId: user.employeeId,
+      emailAddress: user.emailAddress,
+      positionId: user.positionId,
+      addedBy: user.addedBy,
+      addedDate: user.addedDate
+    }));
+    
+    console.log('Saving visibility list:', dataToSave);
+    
+    // Call your API service to save
+    // this.opportunityService.saveVisibilityList(opportunityId, dataToSave)
+    //   .subscribe({
+    //     next: (result) => {
+    //       this.toastService.success('Visibility list saved successfully');
+    //       this.dialogRef.close(true);
+    //     },
+    //     error: (error) => {
+    //       this.toastService.error('Failed to save visibility list');
+    //       console.error('Error saving visibility list:', error);
+    //     }
+    //   });
+    
+    this.dialogRef.close(true);
+  }
+
+  protected onGridReady(): void {
+    this.opportunityReadService.GetOpportunityVisibilityList()
+      .subscribe(result => {
+        this.rowData.set(result);
+      });
+  }
+
+  private buildVisibilityMessage(): string {
+    console.log('visibility component receives', this.opportunityType, this.privacyLevel, this.activeBusinessLine);
+    let visibilityMessage = '';
+    
+    if (this.activeBusinessLine === 'EQD') {
+      const key = `${this.activeBusinessLine}${this.opportunityType}${this.privacyLevel}`;
+      visibilityMessage = (GlobalConstants as Record<string, string>)[key] ?? 'visibility message not found';
+    } else {
+      visibilityMessage = `This opportunity has been saved with a <b>${this.privacyLevel}</b> privacy level. The users that have visibility to this opportunity are: <br>`;
+      
+      if (this.privacyLevel === 'Normal' || this.privacyLevel === 'Sensitive') {
+        const normalSensitiveText = (GlobalConstants as Record<string, string>)['NormalSensitive'];
+        visibilityMessage += normalSensitiveText;
+      } else if (this.privacyLevel === 'Privileged') {
+        const privilegedText = (GlobalConstants as Record<string, string>)['Privileged'];
+        visibilityMessage += privilegedText;
+      }
+    }
+    
+    console.log('visibility message:', visibilityMessage);
+    return visibilityMessage;
+  }
+
+  searchEmployeesForVisibility(searchTerm: string): Observable<IBnppParticipant[]> {
+    return this.employeeService.searchEmployeesForVisibility(searchTerm);
+  }
+
+  addCurrentUserAsParticipant(): IBnppParticipant[] {
+    // Don't pre-populate - let them search and add
+    return [];
+  }
+
+  closePage(): void {
+    this.dialogRef.close();
+  }
+}
+4. Updated Visibility Component HTML
+opportunity-visibility.component.html
+<div class="d-flex flex-column visibility-container">
+  <div class="custom-header px-3 d-flex justify-content-between">
+    <span>Opportunity Visibility</span>
+    <button class="btn btn-link-secondary" (click)="closePage()">
+      <i class="icon icon-close"></i>
+    </button>
+  </div>
+
+  <!--popup content -->
+  <div class="p-3 flex-grow-1 d-flex flex-column">
+    <p class="h5 fw-bold">
+      Visibility Guidelines
+    </p>
+    <p [innerHTML]="visibilityMessage"></p>
+
+    <div class="form-row">
+      <div class="col-12">
+        <app-employee-multi-select-search
+          id="BnppParticipants"
+          [searchItemsCallback]="searchEmployeesForVisibility.bind(this)"
+          [addInitialItemsCallback]="addCurrentUserAsParticipant.bind(this)"
+          (employeeSelected)="onEmployeeSelected($event)"
+          inputPlaceholder="Search for an Employee to add to the list"
+          displayMemberPath="{fullName} ({emailAddress})"
+          noResultsMessage="No results found in Employee Directory">
+        </app-employee-multi-select-search>
+      </div>
+    </div>
+
+    <ag-grid-angular 
+      class="flex-grow-1 mt-3" 
+      [autosizeStrategy]="{type: 'fitGridWidth', columnLimits: [{colId: 'isManuallyAdded', minWidth:90, maxWidth:100}]}"
+      [columnDefs]="colDefs" 
+      [rowData]="rowData()" 
+      (gridReady)="onGridReady()" 
+      [theme]="bnpTheme">
+    </ag-grid-angular>
+  </div>
+
+  <div class="d-flex justify-content-end p-3">
+    <button class="btn btn-outline-primary font-weight-bold" (click)="closeDialog()">Cancel</button>
+    <button class="ml-2 btn btn-primary font-weight-bold" (click)="saveList()">Save</button>
+  </div>
+</div>
+Benefits of This Approach:
+✅ Single Responsibility - Search component only searches, parent handles business logic
+✅ Reusable - Search component can be used anywhere without modification
+✅ Maintainable - All business rules in one place (visibility component)
+✅ Testable - Easy to test business logic separately from UI component
+✅ Flexible - Easy to add new validation rules or change behavior
+✅ Clear Separation - Search = UI concern, Adding to grid = Business concern
+This is a much better architecture! 🎯
