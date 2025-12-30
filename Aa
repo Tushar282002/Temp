@@ -1,5 +1,6 @@
-Here's the 100% working code - simplified and clean:
-1. Search Component TypeScript
+
+Here's the updated code with minimum 3 characters search requirement and console logging to see the API data:
+1. Updated Search Component TypeScript
 employee-multi-select-search.component.ts
 import { NgIf } from '@angular/common';
 import { Component, Input, ViewEncapsulation, signal, ViewChild, ElementRef, Output, EventEmitter } from '@angular/core';
@@ -42,6 +43,7 @@ export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteCom
   @Input() override displayMemberPath = '{fullName} ({emailAddress})';
   @Input() override inputPlaceholder: string = 'Search employees...';
   @Input() noResultsMessage: string = 'No results found in Employee Directory';
+  @Input() minSearchLength: number = 3; // Minimum characters required for search
   
   //#endregion
   
@@ -54,6 +56,12 @@ export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteCom
   //#region Private Properties
   
   private employeeMap = new Map<string, T>();
+  
+  //#endregion
+  
+  //#region Public Properties for Template
+  
+  showMinLengthMessage = signal<boolean>(false);
   
   //#endregion
   
@@ -80,28 +88,58 @@ export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteCom
     const input = event.target as HTMLInputElement;
     const value = input.value.trim();
     
+    // Clear results if empty
     if (value.length === 0) {
       this.filteredOptions.set([]);
       this.employeeMap.clear();
+      this.showMinLengthMessage.set(false);
       return;
     }
     
+    // Check minimum length requirement
+    if (value.length < this.minSearchLength) {
+      this.filteredOptions.set([]);
+      this.employeeMap.clear();
+      this.showMinLengthMessage.set(true);
+      console.log(`Search requires at least ${this.minSearchLength} characters. Current: ${value.length}`);
+      return;
+    }
+    
+    // Hide minimum length message once requirement is met
+    this.showMinLengthMessage.set(false);
+    
+    // Perform search
     if (this.searchItemsCallback) {
       this.isSearchInProgress = true;
+      console.log('🔍 Searching for:', value);
+      
       this.searchItemsCallback(value).subscribe({
         next: (results: T[]) => {
+          console.log('✅ API Response - Total Results:', results.length);
+          console.log('📋 Full API Data:', results);
+          
+          // Log each employee detail
+          results.forEach((employee, index) => {
+            console.log(`Employee ${index + 1}:`, employee);
+          });
+          
           this.employeeMap.clear();
           
           const options = results.map(result => {
-            const optionInfo = new OptionInfo(result, this.getViewValue(result));
+            const displayValue = this.getViewValue(result);
+            console.log('Display Value:', displayValue);
+            const optionInfo = new OptionInfo(result, displayValue);
             this.employeeMap.set(optionInfo.objectAsString, result);
             return optionInfo;
           });
           
           this.filteredOptions.set(options);
           this.isSearchInProgress = false;
+          
+          console.log('✅ Options created:', options.length);
         },
-        error: () => {
+        error: (error) => {
+          console.error('❌ API Error:', error);
           this.isSearchInProgress = false;
           this.filteredOptions.set([]);
           this.employeeMap.clear();
@@ -124,6 +162,9 @@ export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteCom
     event.stopPropagation();
     const employee = this.employeeMap.get(option.objectAsString);
     if (employee) {
+      console.log('✅ Employee Selected:', employee);
+      console.log('📧 Employee Email:', (employee as any).emailAddress);
+      console.log('👤 Employee Name:', (employee as any).fullName);
       this.employeeSelected.emit(employee);
     }
   }
@@ -134,7 +175,7 @@ export class EmployeeMultiSelectSearchComponent<T> extends SearchAutoCompleteCom
   
   //#endregion
 }
-2. Search Component HTML
+2. Updated Search Component HTML
 employee-multi-select-search.component.html
 <div>
   <div [class]="isInvalid ? 'form-group' : ''">
@@ -186,7 +227,13 @@ employee-multi-select-search.component.html
         }
       </div>
       
-      <mat-option *ngIf="filteredOptions()?.length === 0 && searchInput.value && !isSearchInProgress" disabled>
+      <!-- Minimum Length Message -->
+      <mat-option *ngIf="showMinLengthMessage()" disabled class="min-length-message">
+        Please enter at least {{ minSearchLength }} characters to search
+      </mat-option>
+      
+      <!-- No Results Message -->
+      <mat-option *ngIf="filteredOptions()?.length === 0 && searchInput.value && searchInput.value.length >= minSearchLength && !isSearchInProgress" disabled>
         {{ noResultsMessage }}
       </mat-option>
     </mat-autocomplete>
@@ -202,7 +249,7 @@ employee-multi-select-search.component.html
     </div>
   </div>
 </div>
-3. Search Component CSS
+3. Updated Search Component CSS (Add min-length message style)
 employee-multi-select-search.component.scss
 .autocomplete-wrapper {
   flex: 1 1 auto;
@@ -240,6 +287,14 @@ employee-multi-select-search.component.scss
       }
     }
   }
+}
+
+.min-length-message {
+  padding: 12px 16px !important;
+  color: #666;
+  font-style: italic;
+  font-size: 14px;
+  text-align: center;
 }
 
 .form-control[readonly], .form-control:disabled {
@@ -324,185 +379,62 @@ employee-multi-select-search.component.scss
     }
   }
 }
-4. Visibility Component TypeScript
+4. Updated Visibility Component (with detailed logging)
 opportunity-visibility.component.ts
-export class OpportunityVisibilityComponent {
+onEmployeeSelected(employee: IBnppParticipant): void {
+  console.log('🎯 Employee received in visibility component:', employee);
+  console.log('📋 Employee properties:', {
+    fullName: employee.fullName,
+    emailAddress: employee.emailAddress,
+    employeeId: employee.employeeId,
+    positionId: employee.positionId,
+    uid: (employee as any).uid,
+    firstName: (employee as any).firstName,
+    lastName: (employee as any).lastName,
+    allProperties: employee
+  });
   
-  private readonly employeeService = inject(EmployeeService);
-  private readonly userService = inject(UserService);
-  private readonly permissionService = inject(PermissionService);
-  private readonly opportunityReadService = inject(OpportunityReadService);
-  private readonly dialogRef = inject(MatDialogRef<OpportunityVisibilityComponent>);
-
-  colDefs: ColDef[] = [
-    { field: nameof<IAccessList>("employeeName"), headerName: 'NAME' },
-    { field: nameof<IAccessList>("teamName"), headerName: "TEAM NAME" },
-    { field: nameof<IAccessList>("visibilityRules"), headerName: "VISIBILITY RULES" },
-    { field: nameof<IAccessList>("addedBy"), headerName: "ADDED BY" },
-    {
-      field: nameof<IAccessList>("isManuallyAdded"),
-      sort: 'desc',
-      suppressHeaderFilterButton: false,
-      headerComponentParams: {
-        innerHeaderComponent: AgGridIconHeaderTemplate,
-        innerHeaderComponentParams: { iconName: "bin-outline", isSvg: true }
-      },
-      cellClass: 'text-center',
-      cellRendererSelector: (cellParams: ICellRendererParams<IAccessList, boolean, any>) => cellParams.value ? {
-        component: AgGridCellButtonTemplate,
-        params: {
-          iconName: "icon-close",
-          style: 'fw-bold fs-1 danger',
-          onClick: (rowData: IAccessList) => this.deleteRow(rowData)
-        }
-      } : undefined
-    }
-  ];
-
-  rowData = signal<IAccessList[]>([]);
-  bnpTheme = agGridTheme();
-  activeBusinessLine = getBusinessAreaName(this.permissionService.activeBusinessArea);
-  opportunityType = "";
-  privacyLevel = "";
-  visibilityMessage = '';
-
-  ngOnInit(): void {
-    this.opportunityReadService.opportunityObservable.subscribe((opportunity: IOpportunityModel) => {
-      this.opportunityType = opportunity.opportunityType ?? "";
-      this.privacyLevel = opportunity.privacyLevel ?? "";
-      this.visibilityMessage = this.buildVisibilityMessage();
-    });
-  }
-
-  onEmployeeSelected(employee: IBnppParticipant): void {
-    const currentData = this.rowData();
-    
-    const newEntry: IAccessList = {
-      id: this.generateTempId(),
-      employeeName: employee.fullName,
-      emailAddress: employee.emailAddress,
-      employeeId: employee.employeeId,
-      teamName: '',
-      visibilityRules: 'Manually Added',
-      addedBy: `${this.userService.context?.firstName} ${this.userService.context?.lastName}`,
-      isManuallyAdded: true
-    };
-    
-    this.rowData.set([newEntry, ...currentData]);
-  }
-
-  private generateTempId(): string {
-    return 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  }
-
-  private deleteRow(accessToRemove?: IAccessList): void {
-    if (!accessToRemove?.id) {
-      return;
-    }
-    const newArray = this.rowData().filter(al => al.id !== accessToRemove?.id);
-    this.rowData.set(newArray);
-  }
-
-  protected closeDialog(): void {
-    this.dialogRef.close(false);
-  }
-
-  protected saveList(): void {
-    const manuallyAddedUsers = this.rowData().filter(item => item.isManuallyAdded);
-    console.log('Saving list:', manuallyAddedUsers);
-    this.dialogRef.close(true);
-  }
-
-  protected onGridReady(): void {
-    this.opportunityReadService.GetOpportunityVisibilityList()
-      .subscribe(result => {
-        this.rowData.set(result);
-      });
-  }
-
-  private buildVisibilityMessage(): string {
-    let visibilityMessage = '';
-    
-    if (this.activeBusinessLine === 'EQD') {
-      const key = `${this.activeBusinessLine}${this.opportunityType}${this.privacyLevel}`;
-      visibilityMessage = (GlobalConstants as Record<string, string>)[key] ?? 'visibility message not found';
-    } else {
-      visibilityMessage = `This opportunity has been saved with a <b>${this.privacyLevel}</b> privacy level. The users that have visibility to this opportunity are: <br>`;
-      
-      if (this.privacyLevel === 'Normal' || this.privacyLevel === 'Sensitive') {
-        const normalSensitiveText = (GlobalConstants as Record<string, string>)['NormalSensitive'];
-        visibilityMessage += normalSensitiveText;
-      } else if (this.privacyLevel === 'Privileged') {
-        const privilegedText = (GlobalConstants as Record<string, string>)['Privileged'];
-        visibilityMessage += privilegedText;
-      }
-    }
-    
-    return visibilityMessage;
-  }
-
-  searchEmployeesForVisibility(searchTerm: string): Observable<IBnppParticipant[]> {
-    return this.employeeService.searchEmployeesForVisibility(searchTerm);
-  }
-
-  addCurrentUserAsParticipant(): IBnppParticipant[] {
-    return [];
-  }
-
-  closePage(): void {
-    this.dialogRef.close();
-  }
+  const currentData = this.rowData();
+  console.log('📊 Current grid data:', currentData);
+  
+  const newEntry: IAccessList = {
+    id: this.generateTempId(),
+    employeeName: employee.fullName,
+    emailAddress: employee.emailAddress,
+    employeeId: employee.employeeId,
+    teamName: '',
+    visibilityRules: 'Manually Added',
+    addedBy: `${this.userService.context?.firstName} ${this.userService.context?.lastName}`,
+    isManuallyAdded: true
+  };
+  
+  console.log('➕ New entry to be added:', newEntry);
+  
+  this.rowData.set([newEntry, ...currentData]);
+  
+  console.log('✅ Grid updated. Total rows:', this.rowData().length);
 }
-5. Visibility Component HTML
-opportunity-visibility.component.html
-<div class="d-flex flex-column visibility-container">
-  <div class="custom-header px-3 d-flex justify-content-between">
-    <span>Opportunity Visibility</span>
-    <button class="btn btn-link-secondary" (click)="closePage()">
-      <i class="icon icon-close"></i>
-    </button>
-  </div>
-
-  <div class="p-3 flex-grow-1 d-flex flex-column">
-    <p class="h5 fw-bold">
-      Visibility Guidelines
-    </p>
-    <p [innerHTML]="visibilityMessage"></p>
-
-    <div class="form-row mb-3">
-      <div class="col-12">
-        <app-employee-multi-select-search
-          id="BnppParticipants"
-          [searchItemsCallback]="searchEmployeesForVisibility.bind(this)"
-          [addInitialItemsCallback]="addCurrentUserAsParticipant.bind(this)"
-          (employeeSelected)="onEmployeeSelected($event)"
-          inputPlaceholder="Search for an Employee to add to the list"
-          displayMemberPath="{fullName} ({emailAddress})"
-          noResultsMessage="No results found in Employee Directory">
-        </app-employee-multi-select-search>
-      </div>
-    </div>
-
-    <ag-grid-angular 
-      class="flex-grow-1" 
-      style="width: 100%; height: 400px;"
-      [autosizeStrategy]="{type: 'fitGridWidth', columnLimits: [{colId: 'isManuallyAdded', minWidth:90, maxWidth:100}]}"
-      [columnDefs]="colDefs" 
-      [rowData]="rowData()" 
-      (gridReady)="onGridReady()" 
-      [theme]="bnpTheme">
-    </ag-grid-angular>
-  </div>
-
-  <div class="d-flex justify-content-end p-3">
-    <button class="btn btn-outline-primary font-weight-bold" (click)="closeDialog()">Cancel</button>
-    <button class="ml-2 btn btn-primary font-weight-bold" (click)="saveList()">Save</button>
-  </div>
-</div>
-This is 100% working code:
-✅ Search works exactly like client-search
-✅ Checkbox adds employee to grid immediately
-✅ Grid displays properly with all data
-✅ No complex validation - just adds data
-✅ Simple and clean code
-Just copy and paste! 🎯
+What This Does:
+✅ Minimum 3 characters required - Shows message if less than 3 characters
+✅ Detailed console logging - You'll see:
+What you're searching for
+Full API response
+Each employee's data structure
+What gets selected
+What gets added to grid
+✅ Console Output Example:
+🔍 Searching for: may
+✅ API Response - Total Results: 5
+📋 Full API Data: [{...}, {...}, ...]
+Employee 1: {fullName: "...", emailAddress: "...", ...}
+Display Value: Mayank SHAH (mayank.p.shah@asia.bnpparibas.com)
+✅ Options created: 5
+✅ When you select:
+✅ Employee Selected: {fullName: "...", emailAddress: "...", ...}
+📧 Employee Email: mayank.p.shah@asia.bnpparibas.com
+👤 Employee Name: Mayank SHAH
+🎯 Employee received in visibility component: {...}
+📋 Employee properties: {fullName: ..., emailAddress: ..., ...}
+➕ New entry to be added: {...}
+✅ Grid updated. Total rows: 1
+Now open your browser console and search for an employee. You'll see exactly what data structure comes from the API, and we can map it correctly to the grid! 🎯
