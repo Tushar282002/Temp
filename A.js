@@ -1,3 +1,198 @@
+@use "@angular/material" as mat;
+@use "../../../../src/styles/colors.scss" as colors;
+
+app-employee-multi-select-search {
+  // Hide the default Material arrow
+  mat-select .mat-mdc-select-arrow {
+    display: none !important;
+  }
+
+  .placeholder {
+    left: 0;
+    top: 0;
+    color: colors.$secondary;
+  }
+
+  .mat-mdc-select-placeholder {
+    color: colors.$secondary-dark;
+  }
+}
+
+// Autocomplete wrapper - matches your multi-select
+.autocomplete-wrapper {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+.cursor-class {
+  cursor: pointer;
+}
+
+// Options styling - matches your multi-select dropdown
+.option-style-truncate {
+  width: 100% !important;
+  overflow-x: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  display: block !important;
+  justify-content: start !important;
+  align-content: center !important;
+  padding: 8px 16px !important; // Added proper padding like mat-option default
+
+  .option-checkbox {
+    width: 100%;
+    padding: 2px 2px;
+    margin: 0;
+
+    ::ng-deep {
+      .mdc-checkbox {
+        margin-right: 12px;
+      }
+
+      .mdc-label {
+        width: 100%;
+        cursor: pointer;
+        font-size: 0.875rem !important;
+      }
+    }
+  }
+}
+
+// Search box styling - keeping your existing styles
+.form-control[readonly],
+.form-control:disabled {
+  margin-left: 0px;
+}
+
+.input-search-box {
+  position: relative;
+
+  .input-text {
+    border-right: none;
+  }
+
+  .input-group-append {
+    .input-group-text {
+      background-color: #fff;
+      border-left: none;
+      cursor: pointer;
+
+      &.no-border-left {
+        border-left: 1px solid #ced4da;
+      }
+    }
+  }
+
+  &.is-invalid {
+    .input-text,
+    .input-group-text {
+      border-color: #dc3545;
+    }
+  }
+
+  &.soft-is-invalid {
+    .input-text,
+    .input-group-text {
+      border-color: #ffc107;
+    }
+  }
+}
+
+// Validation messages - keeping your existing styles
+.crm-form-error-feedback {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+
+  i {
+    margin-right: 4px;
+  }
+}
+
+.soft-invalid-feedback {
+  color: #ffc107;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+
+  i {
+    margin-right: 4px;
+  }
+}
+
+// Tooltip styling
+.tooltip {
+  font-size: 12px;
+  max-width: 300px;
+}
+
+// Material autocomplete panel overrides - matching multi-select dropdown
+::ng-deep {
+  .mat-mdc-autocomplete-panel {
+    // Remove default hover color like in your multi-select
+    @include mat.option-overrides(
+      (
+        hover-state-layer-color: transparent,
+      )
+    );
+
+    // Custom hover effect for options
+    .mat-mdc-option {
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.04);
+      }
+
+      // Remove default Material padding and apply custom
+      padding: 0 !important;
+
+      .mat-mdc-option-text {
+        width: 100%;
+      }
+    }
+
+    // Style for the options container
+    .autocomplete-wrapper {
+      .mat-mdc-option {
+        min-height: 48px;
+        line-height: 48px;
+      }
+    }
+  }
+
+  // No results message styling
+  .mat-mdc-option[disabled] {
+    color: colors.$secondary;
+    opacity: 1;
+  }
+}
+
+// Additional styling to match the multi-select look
+::ng-deep {
+  .mat-mdc-autocomplete-panel.mat-autocomplete-panel {
+    .mat-mdc-option {
+      .option-style-truncate {
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.04);
+        }
+      }
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
 Here's the complete fixed code with the exact CSS styling you want:
 1. Fixed TypeScript Component
 employee-multi-select-search.component.ts
