@@ -1,3 +1,31 @@
+if (!_privacyLevelCheckDone)
+{
+    // New interaction
+    if (!_permissionService.ActiveBusinessArea.IsGmBusinessArea() &&
+        !string.IsNullOrEmpty(_userAuthenticationService.Context.TeamPrivacy))
+    {
+        // Non-GM + team privacy exists → apply team default
+        vm.PrivacyLevel = vm.PrivacyLevels.FirstOrDefault(x =>
+            string.Equals(x.Value, _userAuthenticationService.Context.TeamPrivacy,
+                StringComparison.OrdinalIgnoreCase));
+    }
+    else if (_permissionService.ActiveBusinessArea.IsGmBusinessArea())
+    {
+        // GM → retain existing behaviour
+        vm.PrivacyLevel = new PrivacyViewModel(interaction.Visibility);
+    }
+    else
+    {
+        // No team privacy configured → leave blank
+        vm.PrivacyLevel = null;
+    }
+}
+else
+{
+    // Existing interaction — always load saved value
+    vm.PrivacyLevel = new PrivacyViewModel(PrivacyLevels.Privileged);
+}
+
 
 Here's the updated code with minimum 3 characters search requirement and console logging to see the API data:
 1. Updated Search Component TypeScript
