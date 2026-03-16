@@ -1,3 +1,60 @@
+
+public void UpdateStrategicClientFromTags(string clientId, List<TagListModel> currentTags)
+{
+    // Check if any strategic tag exists in current tags
+    var isStrategic = currentTags.Any(t =>
+        _appParameters.StrategicClientTags.Contains(
+            t.Name, StringComparer.OrdinalIgnoreCase));
+
+    var strategicValue = isStrategic ? "Y" : "N";
+
+    // Update MyBusinessLineClients cache
+    if (_listsOfClients[ClientListType.MyBusinessLineClients] != null)
+    {
+        var myClient = _listsOfClients[ClientListType.MyBusinessLineClients]
+            .FirstOrDefault(x => x.Id == clientId);
+        if (myClient != null)
+            myClient.StrategicClient = strategicValue;
+    }
+
+    // Update MyBusinessLineTeamClients cache
+    if (_listsOfClients[ClientListType.MyBusinessLineTeamClients] != null)
+    {
+        var client = _listsOfClients[ClientListType.MyBusinessLineTeamClients]
+            .FirstOrDefault(x => x.Id == clientId);
+
+        if (client != null && client.StrategicClient != strategicValue)
+        {
+            _listsOfClients[ClientListType.MyBusinessLineTeamClients].Remove(client);
+            client.StrategicClient = strategicValue;
+            _listsOfClients[ClientListType.MyBusinessLineTeamClients].Add(client);
+
+            // Update isolated storage cache
+            var storedListOfClients = _isolatedStorageService
+                .GetEncryptedItemFromStorage<StorageItem<Client>>
+                (ClientListType.MyBusinessLineTeamClients);
+
+            if (storedListOfClients?.CachedList != null)
+            {
+                storedListOfClients.CachedList = storedListOfClients.CachedList
+                    .Remove(c => c.Id == clientId).ToList();
+                storedListOfClients.CachedList.Add(client);
+
+                _isolatedStorageService.SaveEncryptedItemToStorage(
+                    ClientListType.MyBusinessLineTeamClients, storedListOfClients);
+            }
+
+            OnListOfClientsUpdated(ClientListType.MyBusinessLineTeamClients,
+                _listsOfClients[ClientListType.MyBusinessLineTeamClients], false);
+        }
+    }
+}
+
+
+
+
+
+
 if (!_privacyLevelCheckDone)
 {
     // New interaction
