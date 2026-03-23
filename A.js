@@ -1,3 +1,24 @@
+
+import { vi, expect as vitestExpect } from 'vitest';
+
+const exp = vitestExpect as any;
+
+(globalThis as any).jasmine = {
+  createSpy: (name?: string) => vi.fn(),
+  createSpyObj: (_name: string, methods: string[]) => {
+    const obj: any = {};
+    methods.forEach((m) => (obj[m] = vi.fn()));
+    return obj;
+  },
+  objectContaining: (sample: object) => exp.objectContaining(sample),
+  arrayContaining: (sample: unknown[]) => exp.arrayContaining(sample),
+  stringMatching: (pattern: string | RegExp) => exp.stringMatching(pattern),
+  any: (constructor: any) => exp.any(constructor),
+};
+
+
+
+
 Create a new file src/jasmine-shim.ts:
 import { vi } from 'vitest';
 
