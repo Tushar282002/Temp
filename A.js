@@ -1,3 +1,36 @@
+Create vitest.config.ts in project root
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+    include: ['src/**/*.spec.ts'],
+    setupFiles: ['src/test-setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+    },
+  },
+  esbuild: {
+    // Needed for Angular decorators
+    target: 'es2022',
+  },
+});
+Step 3 — Create src/test-setup.ts
+import '@angular/compiler';
+import { TestBed } from '@angular/core/testing';
+import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from '@angular/platform-browser-dynamic/testing';
+
+// Initialize the Angular testing environment once
+TestBed.initTestEnvironment(
+  BrowserDynamicTestingModule,
+  platformBrowserDynamicTesting(),
+);
+
+
+
+
 public ClientCoverageEqdWidgetViewModel(IDialogService dialogSerivce, 
     IClientsService clientService, 
     IClientsDialogService clientsDialogService, 
