@@ -1,3 +1,23 @@
+Create a new file src/jasmine-shim.ts:
+import { vi } from 'vitest';
+
+// Shim jasmine globals so existing specs don't need to be rewritten
+(globalThis as any).jasmine = {
+  createSpy: (name?: string) => vi.fn(),
+  createSpyObj: (name: string, methods: string[]) => {
+    const obj: any = {};
+    methods.forEach((m) => (obj[m] = vi.fn()));
+    return obj;
+  },
+  objectContaining: (sample: object) => expect.objectContaining(sample),
+  arrayContaining: (sample: unknown[]) => expect.arrayContaining(sample),
+  stringMatching: (pattern: string | RegExp) => expect.stringMatching(pattern),
+  any: (constructor: any) => expect.any(constructor),
+};
+
+
+
+
 import { defineConfig } from 'vitest/config';
 import { angular } from '@analogjs/vitest-angular/plugin';
 
