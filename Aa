@@ -1,3 +1,300 @@
+// opportunity-visibility.component.ts
+
+@Component({
+  selector: 'app-opportunity-visibility',
+  templateUrl: './opportunity-visibility.component.html',
+  styleUrl: './opportunity-visibility.component.scss',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, AgGridAngular, MatIconModule, NgIf, MultiSelectSearchComponent, FormsModule],
+  encapsulation: ViewEncapsulation.None
+})
+export class OpportunityVisibilityComponent extends BaseComponent {
+
+  private readonly _userContextHelper = inject(UserContextHelper);
+  private readonly _employeeService = inject(EmployeeService);
+  private readonly _userService = inject(UserService);
+  private readonly _permissionService = inject(PermissionService);
+  private readonly _opportunityReadService = inject(OpportunityReadService);
+  private readonly _opportunityWriteService = inject(OpportunityWriteService);
+  private readonly _dialogRef = inject(MatDialogRef<OpportunityVisibilityComponent>);
+
+  protected colDefs: ColDef[] = [
+    { field: nameof<IAccessList>("employeeName"), headerName: 'NAME', flex: 2, filter: true, headerTooltip: 'Name' },
+    { field: nameof<IAccessList>("teamName"), headerName: "TEAM NAME", flex: 2, filter: true, headerTooltip: 'Team Name' },
+    { field: nameof<IAccessList>("visibilityRules"), headerName: "VISIBILITY RULES", flex: 2, filter: true, headerTooltip: 'Visibility Rules' },
+    { field: nameof<IAccessList>("addedBy"), headerName: "ADDED BY", flex: 2, filter: true, headerTooltip: 'Added by' },
+    {
+      field: nameof<IAccessList>("isManuallyAdded"),
+      sort: 'desc',
+      flex: 1,
+      headerTooltip: "Delete user",
+      headerComponentParams: {
+        innerHeaderComponent: AgGridIconHeaderTemplate,
+      },
+      innerHeaderComponentParams: { iconName: "bin-outline", isSvg: true },
+      cellClass: 'text-center',
+      cellRendererSelector: (cellParams: ICellRendererParams<IAccessList, boolean, any>) => cellParams.value
+        ? {
+            component: AgGridCellIconButtonTemplate,
+            params: {
+              iconName: "icon-close",
+              style: 'fw-bold danger fs-x-medium',
+              onClick: (rowData: IAccessList) => this.deleteRow(rowData)
+            }
+          }
+        : undefined
+    }
+  ];
+
+  protected accessListRowData = signal<IAccessList[]>([]);
+  protected bnpTheme = agGridTheme();
+  protected activeBusinessLine = getBusinessAreaName(this._permissionService.activeBusinessarea);
+  protected opportunityType = '';
+  protected privacyLevel = '';
+  protected visibilityMessage = '';
+  protected addTeamMembers = false;
+  manuallyAddedEmployee = model<Employee[]>([]);
+
+  // Tracks IDs added specifically via the "Add all team members" checkbox
+  // so we know exactly which rows to remove when unchecking
+  private _teamCheckboxAddedIds = new Set<string>();
+
+  // Cached team members fetched once per popup open — avoids multiple API calls
+  private _cachedTeamMembers: TeamMember[] = [];
+
+  ngOnInit(): void {
+    this._opportunityReadService.opportunityObservable
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((opportunity: IOpportunityModel) => {
+        this.opportunityType = opportunity.opportunityType ?? '';
+        this.privacyLevel = opportunity.privacyLevel ?? '';
+        this.visibilityMessage = this.buildVisibilityMessage();
+      });
+  }
+
+  protected onGridReady(): void {
+    // Step 1: Pre-fetch team members so we can infer checkbox state after grid loads
+    const globalUserId = this._userContextHelper.context?.globalUserId?.toUpperCase() ?? '';
+
+    this._employeeService
+      .fetchTeamMembers(globalUserId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((teamMembers: TeamMember[]) => {
+        this._cachedTeamMembers = teamMembers;
+
+        // Step 2: Now load the access list and infer checkbox state
+        this.processApiCall(
+          this._opportunityReadService.GetOpportunityVisibilityList(),
+          'Error fetching access list',
+          (result: IAccessList[]) => {
+            this.accessListRowData.set(result);
+            this._inferCheckboxState(result, teamMembers);
+          }
+        );
+      });
+  }
+
+  /**
+   * After loading the saved access list, determine if the checkbox should
+   * appear checked. It should be checked if ALL currently active team members
+   * (those with a valid ppi) are present in the loaded list.
+   * If even one is missing, the checkbox stays unchecked.
+   */
+  private _inferCheckboxState(loadedList: IAccessList[], teamMembers: TeamMember[]): void {
+    const validTeamMembers = teamMembers.filter(tm => tm.ppi && tm.ppi.trim() !== '');
+
+    if (validTeamMembers.length === 0) {
+      this.addTeamMembers = false;
+      return;
+    }
+
+    const loadedIds = new Set(loadedList.map(al => al.id));
+    const allPresent = validTeamMembers.every(tm => loadedIds.has(tm.eid));
+
+    this.addTeamMembers = allPresent;
+
+    if (allPresent) {
+      // Populate the tracking set so uncheck works correctly
+      validTeamMembers.forEach(tm => this._teamCheckboxAddedIds.add(tm.eid));
+    }
+  }
+
+  protected onAddTeamMembersChange(): void {
+    if (this.addTeamMembers) {
+      this._addTeamMembersToAccessList();
+    } else {
+      this._removeTeamMembersAddedByCheckbox();
+    }
+  }
+
+  /**
+   * Adds all valid team members (those with ppi) to the grid.
+   * Uses cached team members if available to avoid a second API call.
+   * Sets teamName from the TeamMember.tid field mapped through user context.
+   */
+  private _addTeamMembersToAccessList(): void {
+    const doAdd = (teamMembers: TeamMember[]) => {
+      const currentData = this.accessListRowData();
+      const existingIds = new Set(currentData.map(e => e.id));
+
+      // Resolve team name: use context teamName, fall back to empty string
+      // tid on TeamMember is the team ID, not the name — context has the name
+      const teamName = this._userContextHelper.context?.teamName ?? '';
+
+      const newEntries: IAccessList[] = teamMembers
+        .filter(tm =>
+          // Must have a positionId — Siebel requires this to save the row
+          tm.ppi && tm.ppi.trim() !== '' &&
+          // Skip if already in the grid
+          !existingIds.has(tm.eid)
+        )
+        .map(tm => ({
+          id: tm.eid,
+          employeeName: tm.en,
+          positionId: tm.ppi,
+          // FIX: was using userContext.teamName which came through blank
+          // TeamMember.tid is the team ID; name comes from user context
+          teamName: teamName,
+          visibilityRules: 'Manually Added',
+          addedBy: this._userService.GetUserFullName(),
+          isManuallyAdded: true
+        }));
+
+      if (newEntries.length > 0) {
+        // Track which IDs came from this checkbox action
+        newEntries.forEach(e => this._teamCheckboxAddedIds.add(e.id!));
+        this.accessListRowData.set([...newEntries, ...currentData]);
+      }
+    };
+
+    if (this._cachedTeamMembers.length > 0) {
+      // Use cached — no extra API call
+      doAdd(this._cachedTeamMembers);
+    } else {
+      const globalUserId = this._userContextHelper.context?.globalUserId?.toUpperCase() ?? '';
+      this._employeeService
+        .fetchTeamMembers(globalUserId)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((teamMembers: TeamMember[]) => {
+          this._cachedTeamMembers = teamMembers;
+          doAdd(teamMembers);
+        });
+    }
+  }
+
+  /**
+   * Removes only rows that were added by the checkbox — not manually added
+   * rows that happen to be team members.
+   */
+  private _removeTeamMembersAddedByCheckbox(): void {
+    if (this._teamCheckboxAddedIds.size === 0) {
+      return;
+    }
+
+    const currentData = this.accessListRowData();
+    const filtered = currentData.filter(al => !this._teamCheckboxAddedIds.has(al.id!));
+    this.accessListRowData.set(filtered);
+    this._teamCheckboxAddedIds.clear();
+  }
+
+  protected onEmployeeSelected(employee: Employee): void {
+    const currentData = this.accessListRowData();
+    const exists = currentData.some(row => row.id === employee.id);
+    if (exists) return;
+
+    const newEntry: IAccessList = {
+      id: employee.id,
+      employeeName: employee.fullName,
+      positionId: employee.primaryPositionId,
+      teamName: (employee as any).teamName || '',
+      visibilityRules: 'Manually Added',
+      addedBy: this._userService.GetUserFullName(),
+      isManuallyAdded: true
+    };
+
+    this.accessListRowData.set([newEntry, ...currentData]);
+  }
+
+  protected onEmployeeUnselected(employee: Employee): void {
+    const currentData = this.accessListRowData();
+    const filtered = currentData.filter(row => row.id !== employee.id);
+    this.accessListRowData.set(filtered);
+  }
+
+  protected onGridReady_unused(): void { } // removed — logic moved to onGridReady above
+
+  protected saveUpdatedAccessList(): void {
+    const manuallyAddedUsers = this.accessListRowData().filter(al => al.isManuallyAdded);
+    const opportunity = this._opportunityReadService.opportunity.value;
+
+    const request: UpdateOpportunityAccessListRequest = {
+      opportunityId: opportunity.opportunityId ?? '',
+      accountId: opportunity.client?.clientId,
+      description: opportunity.opportunityTitle,
+      sensitivity: opportunity.privacyLevel,
+      newAccesses: manuallyAddedUsers
+    };
+
+    this.processApiCall(
+      this._opportunityWriteService.updateOpportunityAccessList(request),
+      'Error Updating access list',
+      () => this.closeDialog()
+    );
+  }
+
+  protected closeDialog(): void {
+    this._dialogRef.close(false);
+  }
+
+  protected searchEmployeesForVisibility(searchTerm: string): Observable<Employee[]> {
+    const currentRowIds = this.accessListRowData().map(e => e.id);
+    return this._employeeService.searchEmployeesForVisibility(searchTerm).pipe(
+      map(e => e.filter(existing =>
+        !currentRowIds.includes(existing.id) &&
+        !StringUtil.isNullOrEmpty(existing.primaryPositionId)
+      ))
+    );
+  }
+
+  private deleteRow(accessToRemove?: IAccessList): void {
+    if (!accessToRemove?.id) return;
+
+    // If this row was added by the team checkbox, remove it from tracking set
+    // This handles AC-4: removing a team member individually before saving
+    if (this._teamCheckboxAddedIds.has(accessToRemove.id)) {
+      this._teamCheckboxAddedIds.delete(accessToRemove.id);
+
+      // If the user deleted at least one team member, uncheck the box
+      // so re-checking re-adds the full team cleanly
+      this.addTeamMembers = false;
+    }
+
+    const newArray = this.accessListRowData().filter(al => al.id !== accessToRemove.id);
+    this.accessListRowData.set(newArray);
+  }
+
+  private buildVisibilityMessage(): string {
+    let visibilityMessage = '';
+    visibilityMessage += `This opportunity has been saved with a <b>${this.privacyLevel}</b> privacy level. The users that have visibility to this opportunity are: <br>`;
+
+    if (this.privacyLevel === PrivacyLevels.Normal || this.privacyLevel === PrivacyLevels.Sensitive) {
+      visibilityMessage += GlobalConstants.NormalAndSensitiveAccessDesc;
+    } else if (this.privacyLevel === PrivacyLevels.Privileged) {
+      visibilityMessage += GlobalConstants.PrivilegedAccessDesc;
+    }
+
+    return visibilityMessage;
+  }
+}
+
+
+
+
+
+
+
+
+
 
 public void UpdateStrategicClientFromTags(string clientId, List<TagListModel> currentTags)
 {
