@@ -1,4 +1,331 @@
+import { Component, inject, model, signal, ViewEncapsulation } from '@angular/core';
+import { CommonModule, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
+import { IOpportunityModel } from '../../models/opportunity.model';
+import { GlobalConstants } from './../../../constants/global.constants';
+import { OpportunityReadService } from '../../services/opportunity-read.service';
+import { PermissionService } from '../../../../core/services/permission/permission.service';
+import { getBusinessAreaName } from '../../../../core/enums/business-area.enum';
+import { MultiSelectSearchComponent } from '../../../../controls/multi-select-search/multi-select-search.component';
+import { map, Observable, takeUntil, forkJoin, of } from 'rxjs';
+import { EmployeeService } from './../../../core/services/employee/employee.service';
+import { UserService } from './../../../core/services/user/user.service';
+import { AgGridAngular } from 'ag-grid-angular';
+import type { ColDef, ICellRendererParams } from 'ag-grid-community';
+import { IAccessList } from './../../../core/models/access-list';
+import { nameof, StringUtil } from '../../../../core/utils/string-util';
+import { agGridTheme } from './../../../constants/grid-theme.constants';
+import { MatIconModule } from '@angular/material/icon';
+import { AgGridCellIconButtonTemplate } from './../../../controls/ag-grid-cell-templates/ag-grid-icon-button-template/ag-grid-icon-button-template';
+import { AgGridIconHeaderTemplate } from './../../../controls/ag-grid-cell-templates/ag-grid-icon-header-template/ag-grid-icon-header-template';
+import { OpportunityWriteService } from '../../services/opportunity-write.service';
+import { BaseComponent } from '../../../../controls/abstractions/base.component';
+import { UpdateOpportunityAccessListRequest } from '../../models/opportunity-update-access-list';
+import { Employee } from '../../../../core/models/employee';
+import { PrivacyLevels } from './../../../constants/privacy-levels.constants';
+import { UserContextHelper } from '../../../../core/utils/user-context.util';
+import { TeamMember } from '../../../../modules/dashbaord/models/response/team-member.model';
 
+@Component({
+  selector: 'app-opportunity-visibility',
+  templateUrl: './opportunity-visibility.component.html',
+  styleUrl: './opportunity-visibility.component.scss',
+  standalone: true,
+  imports: [CommonModule, MatDialogModule, AgGridAngular, MatIconModule, NgIf, MultiSelectSearchComponent, FormsModule],
+  encapsulation: ViewEncapsulation.None
+})
+export class OpportunityVisibilityComponent extends BaseComponent {
+
+  private readonly _userContextHelper = inject(UserContextHelper);
+  private readonly _employeeService = inject(EmployeeService);
+  private readonly _userService = inject(UserService);
+  private readonly _permissionService = inject(PermissionService);
+  private readonly _opportunityReadService = inject(OpportunityReadService);
+  private readonly _opportunityWriteService = inject(OpportunityWriteService);
+  private readonly _dialogRef = inject(MatDialogRef<OpportunityVisibilityComponent>);
+
+  protected colDefs: ColDef[] = [
+    { field: nameof<IAccessList>("employeeName"), headerName: 'NAME', flex: 2, filter: true, headerTooltip: 'Name' },
+    { field: nameof<IAccessList>("teamName"), headerName: "TEAM NAME", flex: 2, filter: true, headerTooltip: 'Team Name' },
+    { field: nameof<IAccessList>("visibilityRules"), headerName: "VISIBILITY RULES", flex: 2, filter: true, headerTooltip: 'Visibility Rules' },
+    { field: nameof<IAccessList>("addedBy"), headerName: "ADDED BY", flex: 2, filter: true, headerTooltip: 'Added by' },
+    {
+      field: nameof<IAccessList>("isManuallyAdded"),
+      sort: 'desc',
+      flex: 1,
+      headerTooltip: "Delete user",
+      headerComponentParams: { innerHeaderComponent: AgGridIconHeaderTemplate },
+      innerHeaderComponentParams: { iconName: "bin-outline", isSvg: true },
+      cellClass: 'text-center',
+      cellRendererSelector: (cellParams: ICellRendererParams<IAccessList, boolean, any>) =>
+        cellParams.value ? {
+          component: AgGridCellIconButtonTemplate,
+          params: {
+            iconName: "icon-close",
+            style: 'fw-bold danger fs-x-medium',
+            onClick: (rowData: IAccessList) => this.deleteRow(rowData)
+          }
+        } : undefined
+    }
+  ];
+
+  protected accessListRowData = signal<IAccessList[]>([]);
+  protected bnpTheme = agGridTheme();
+  protected activeBusinessLine = getBusinessAreaName(this._permissionService.activeBusinessarea);
+  protected opportunityType = '';
+  protected privacyLevel = '';
+  protected visibilityMessage = '';
+  protected addTeamMembers = false;
+  manuallyAddedEmployee = model<Employee[]>([]);
+
+  // IDs added specifically via the team checkbox — used to remove them on uncheck
+  private _teamCheckboxAddedIds = new Set<string>();
+
+  // Cached team members — fetched once on grid ready, reused on checkbox click
+  private _cachedTeamMembers: TeamMember[] = [];
+
+  // Resolved team name — fetched once via search API which returns teamName on Employee
+  // GetTeamMembers API does NOT return team name, so we resolve it separately
+  private _resolvedTeamName = '';
+
+  ngOnInit(): void {
+    this._opportunityReadService.opportunityObservable
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((opportunity: IOpportunityModel) => {
+        this.opportunityType = opportunity.opportunityType ?? '';
+        this.privacyLevel = opportunity.privacyLevel ?? '';
+        this.visibilityMessage = this.buildVisibilityMessage();
+      });
+  }
+
+  protected onGridReady(): void {
+    const globalUserId = this._userService.context?.globalUserId?.toUpperCase() ?? '';
+    const teamId = this._userService.context?.teamId ?? '';
+
+    // Run both calls in parallel: team members list + access list
+    // Also resolve team name once using searchEmployeesForVisibility with teamId
+    // because GetTeamMembers does not return team name
+    forkJoin({
+      teamMembers: this._employeeService.fetchTeamMembers(globalUserId),
+      // Search with a space to get team members by teamId — returns Employee[] with teamName populated
+      // We only need one result to extract the teamName
+      teamNameResolution: teamId
+        ? this._employeeService.searchEmployeesForVisibility(' ').pipe(
+            map(employees => {
+              // Find any employee on the current user's team to extract teamName
+              const match = employees.find(e => e.teamName && e.teamName.trim() !== '');
+              return match?.teamName ?? '';
+            })
+          )
+        : of('')
+    })
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(({ teamMembers, teamNameResolution }) => {
+      this._cachedTeamMembers = teamMembers;
+      this._resolvedTeamName = teamNameResolution;
+
+      this.processApiCall(
+        this._opportunityReadService.GetOpportunityVisibilityList(),
+        'Error fetching access list',
+        (result: IAccessList[]) => {
+          this.accessListRowData.set(result);
+
+          // Issue 1 fix for team name: if search didn't return it,
+          // fall back to team name already present in loaded grid rows
+          if (!this._resolvedTeamName) {
+            this._resolvedTeamName =
+              result.find(row => row.teamName && row.teamName.trim() !== '')?.teamName ?? '';
+          }
+
+          // Issue 2 fix: infer checkbox state from saved data
+          this._inferCheckboxState(result, teamMembers);
+        }
+      );
+    });
+  }
+
+  /**
+   * Issue 2: Infer checkbox state on reopen.
+   * Checkbox should be checked if ALL valid team members (those with ppi)
+   * are present in the loaded list. This handles the case where user checked
+   * the box, removed 2 members, saved — on reopen checkbox is still checked
+   * because most members are there, but if ANY are missing it unchecks.
+   *
+   * Per your requirement: if box was checked before, show it checked.
+   * We approximate this by checking if the loaded list contains ANY team member
+   * that was manually added — meaning team checkbox was likely used.
+   */
+  private _inferCheckboxState(loadedList: IAccessList[], teamMembers: TeamMember[]): void {
+    const validTeamMemberIds = new Set(
+      teamMembers
+        .filter(tm => tm.ppi && tm.ppi.trim() !== '')
+        .map(tm => tm.eid)
+    );
+
+    if (validTeamMemberIds.size === 0) {
+      this.addTeamMembers = false;
+      return;
+    }
+
+    // Check if at least one team member exists in the loaded list as manually added
+    // This covers: checked + removed some + saved → still shows checked on reopen
+    const atLeastOneTeamMemberPresent = loadedList.some(
+      al => al.id && validTeamMemberIds.has(al.id) && al.isManuallyAdded
+    );
+
+    this.addTeamMembers = atLeastOneTeamMemberPresent;
+
+    if (atLeastOneTeamMemberPresent) {
+      // Rebuild tracking set from intersection of loaded list and team members
+      // so that uncheck correctly removes only team-sourced rows
+      loadedList.forEach(al => {
+        if (al.id && validTeamMemberIds.has(al.id)) {
+          this._teamCheckboxAddedIds.add(al.id);
+        }
+      });
+    }
+  }
+
+  protected onAddTeamMembersChange(): void {
+    if (this.addTeamMembers) {
+      this._addTeamMembersToAccessList();
+    } else {
+      this._removeTeamMembersAddedByCheckbox();
+    }
+  }
+
+  private _addTeamMembersToAccessList(): void {
+    const doAdd = (teamMembers: TeamMember[]) => {
+      const currentData = this.accessListRowData();
+      const existingIds = new Set(currentData.map(e => e.id));
+
+      const newEntries: IAccessList[] = teamMembers
+        .filter(tm =>
+          // Issue 4 fix: only include members WITH positionId
+          // Siebel silently drops rows without positionId on save
+          // This ensures grid count matches saved count
+          tm.ppi && tm.ppi.trim() !== '' &&
+          !existingIds.has(tm.eid)
+        )
+        .map(tm => ({
+          id: tm.eid,
+          employeeName: tm.en,
+          positionId: tm.ppi,
+          // Issue 1 fix: use _resolvedTeamName fetched via searchEmployeesForVisibility
+          // which returns Employee[] with teamName populated by the API
+          teamName: this._resolvedTeamName,
+          visibilityRules: 'Manually Added',
+          addedBy: this._userService.GetUserFullName(),
+          isManuallyAdded: true
+        }));
+
+      if (newEntries.length > 0) {
+        newEntries.forEach(e => this._teamCheckboxAddedIds.add(e.id!));
+        this.accessListRowData.set([...newEntries, ...currentData]);
+      }
+    };
+
+    if (this._cachedTeamMembers.length > 0) {
+      doAdd(this._cachedTeamMembers);
+    } else {
+      const globalUserId = this._userService.context?.globalUserId?.toUpperCase() ?? '';
+      this._employeeService
+        .fetchTeamMembers(globalUserId)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((teamMembers: TeamMember[]) => {
+          this._cachedTeamMembers = teamMembers;
+          doAdd(teamMembers);
+        });
+    }
+  }
+
+  private _removeTeamMembersAddedByCheckbox(): void {
+    if (this._teamCheckboxAddedIds.size === 0) return;
+
+    const currentData = this.accessListRowData();
+    const filtered = currentData.filter(al => !this._teamCheckboxAddedIds.has(al.id!));
+    this.accessListRowData.set(filtered);
+    this._teamCheckboxAddedIds.clear();
+  }
+
+  protected onEmployeeSelected(employee: Employee): void {
+    const currentData = this.accessListRowData();
+    if (currentData.some(row => row.id === employee.id)) return;
+
+    const newEntry: IAccessList = {
+      id: employee.id,
+      employeeName: employee.fullName,
+      positionId: employee.primaryPositionId,
+      teamName: employee.teamName || '',
+      visibilityRules: 'Manually Added',
+      addedBy: this._userService.GetUserFullName(),
+      isManuallyAdded: true
+    };
+    this.accessListRowData.set([newEntry, ...currentData]);
+  }
+
+  protected onEmployeeUnselected(employee: Employee): void {
+    const filtered = this.accessListRowData().filter(row => row.id !== employee.id);
+    this.accessListRowData.set(filtered);
+  }
+
+  protected saveUpdatedAccessList(): void {
+    const manuallyAddedUsers = this.accessListRowData().filter(al => al.isManuallyAdded);
+    const opportunity = this._opportunityReadService.opportunity.value;
+
+    const request: UpdateOpportunityAccessListRequest = {
+      opportunityId: opportunity.opportunityId ?? '',
+      accountId: opportunity.client?.clientId,
+      description: opportunity.opportunityTitle,
+      sensitivity: opportunity.privacyLevel,
+      newAccesses: manuallyAddedUsers
+    };
+
+    this.processApiCall(
+      this._opportunityWriteService.updateOpportunityAccessList(request),
+      'Error Updating access list',
+      () => this.closeDialog()
+    );
+  }
+
+  protected closeDialog(): void {
+    this._dialogRef.close(false);
+  }
+
+  protected searchEmployeesForVisibility(searchTerm: string): Observable<Employee[]> {
+    const currentRowIds = this.accessListRowData().map(e => e.id);
+    return this._employeeService.searchEmployeesForVisibility(searchTerm).pipe(
+      map(employees => employees.filter(e =>
+        !currentRowIds.includes(e.id) &&
+        !StringUtil.isNullOrEmpty(e.primaryPositionId)
+      ))
+    );
+  }
+
+  private deleteRow(accessToRemove?: IAccessList): void {
+    if (!accessToRemove?.id) return;
+
+    if (this._teamCheckboxAddedIds.has(accessToRemove.id)) {
+      this._teamCheckboxAddedIds.delete(accessToRemove.id);
+      // Uncheck so re-checking re-adds the full team including removed members
+      this.addTeamMembers = false;
+    }
+
+    const newArray = this.accessListRowData().filter(al => al.id !== accessToRemove.id);
+    this.accessListRowData.set(newArray);
+  }
+
+  private buildVisibilityMessage(): string {
+    let msg = `This opportunity has been saved with a <b>${this.privacyLevel}</b> privacy level. The users that have visibility to this opportunity are: <br>`;
+    if (this.privacyLevel === PrivacyLevels.Normal || this.privacyLevel === PrivacyLevels.Sensitive) {
+      msg += GlobalConstants.NormalAndSensitiveAccessDesc;
+    } else if (this.privacyLevel === PrivacyLevels.Privileged) {
+      msg += GlobalConstants.PrivilegedAccessDesc;
+    }
+    return msg;
+  }
+}
 
 See this changes I have made go through the changes and still facing issue 
 
