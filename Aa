@@ -1,3 +1,22 @@
+
+
+See this changes I have made go through the changes and still facing issue 
+
+1) team name is not displaying when we clicking on the checkbox look for that. You can take a reference from search bar that when we search the employee using name and add it in the grid that time team name is coming, so you can take reference from that 
+
+2) also no state of checked and unchecked checkbox is mainted we can directly put some logic that if the check box is clicked previously we can maintain that state only, and if it was checked and we remove 2 members and save it and again on reopening when we unchecked and checked that time all the team members should added including that 2 also 
+
+3) otherwise if we are not able to maintain th state we can display one line that all team members are added
+
+4) when I checked on checkbox that time grid is showing 70 records and save it and when I reopened it shows only 61 records so this glitch should be remove 
+
+
+This I want to do 
+
+
+
+
+
 // opportunity-visibility.component.ts
 
 @Component({
