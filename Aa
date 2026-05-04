@@ -1,3 +1,89 @@
+
+private _inferCheckboxState(loadedList: IAccessList[], teamMembers: TeamMember[]): void {
+  const validTeamMemberIds = new Set(
+    teamMembers
+      .filter(tm =>
+        tm.ppi && tm.ppi.trim() !== '' &&
+        tm.s?.toLowerCase() === 'active'
+      )
+      .map(tm => tm.eid)
+  );
+
+  if (validTeamMemberIds.size === 0) {
+    this.addTeamMembers = false;
+    return;
+  }
+
+  // Read persisted checkbox state from localStorage
+  const wasPreviouslyChecked = this._loadCheckboxState();
+  this.addTeamMembers = wasPreviouslyChecked;
+
+  if (wasPreviouslyChecked) {
+    // Repopulate tracking set — only Manually Added team members
+    // These were added via checkbox (System Added rows are never touched)
+    loadedList.forEach(al => {
+      if (
+        al.id &&
+        validTeamMemberIds.has(al.id) &&
+        al.visibilityRules === 'Manually Added'
+      ) {
+        this._teamCheckboxAddedIds.add(al.id);
+      }
+    });
+  }
+}
+
+
+protected saveUpdatedAccessList(): void {
+  const allManuallyAdded = this.accessListRowData().filter(al => al.isManuallyAdded);
+
+  const seen = new Set<string>();
+  const manuallyAddedUsers = allManuallyAdded.filter(al => {
+    if (!al.id || seen.has(al.id)) return false;
+    seen.add(al.id);
+    return true;
+  });
+
+  const opportunity = this._opportunityReadService.opportunity.value;
+  const request: UpdateOpportunityAccessListRequest = {
+    opportunityId: opportunity.opportunityId ?? '',
+    accountId: opportunity.client?.clientId,
+    description: opportunity.opportunityTitle,
+    sensitivity: opportunity.privacyLevel,
+    newAccesses: manuallyAddedUsers
+  };
+
+  this.processApiCall(
+    this._opportunityWriteService.updateOpportunityAccessList(request),
+    'Error Updating access list',
+    () => {
+      // Persist checkbox state ONLY on successful save
+      this._saveCheckboxState(this.addTeamMembers);
+      this.closeDialog();
+    }
+  );
+}
+
+
+
+
+protected onAddTeamMembersChange(): void {
+  if (this.addTeamMembers) {
+    this._addTeamMembersToAccessList();
+  } else {
+    this._removeTeamMembersAddedByCheckbox();
+  }
+}
+
+
+protected closeDialog(): void {
+  this._dialogRef.close(false);
+}
+
+
+
+
+
 import { Component, inject, model, signal, ViewEncapsulation } from '@angular/core';
 import { CommonModule, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
