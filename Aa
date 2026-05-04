@@ -1,4 +1,27 @@
 
+// Key pattern: "addTeamMembers_{opportunityId}"
+private _getCheckboxStorageKey(): string {
+  const opportunityId = this._opportunityReadService.opportunity.value?.opportunityId ?? '';
+  return `addTeamMembers_${opportunityId}`;
+}
+
+private _saveCheckboxState(checked: boolean): void {
+  const key = this._getCheckboxStorageKey();
+  if (checked) {
+    localStorage.setItem(key, 'true');
+  } else {
+    localStorage.removeItem(key);
+  }
+}
+
+private _loadCheckboxState(): boolean {
+  const key = this._getCheckboxStorageKey();
+  return localStorage.getItem(key) === 'true';
+}
+
+
+
+
 private _inferCheckboxState(loadedList: IAccessList[], teamMembers: TeamMember[]): void {
   const validTeamMemberIds = new Set(
     teamMembers
