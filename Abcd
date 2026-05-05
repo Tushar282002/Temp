@@ -1,0 +1,597 @@
+using CRM.CRMLite.ClientApp.Controls.CustomControls.AutoComplete;
+using CRM.CRMLite.ClientApp.Infrastructure.Abstract;
+using CRM.CRMLite.ClientApp.Infrastructure.Interfaces;
+using CRM.CRMLite.ClientServices.Interfaces;
+using System.Threading.Tasks;
+using System.Threading;
+using ReactiveUI;
+using System.Linq;
+using CRM.ClientFirstLite.Model.DOTNET.Employee;
+using System.Collections.ObjectModel;
+using CRM.CRMLite.ClientApp.Infrastructure;
+using System.Windows.Input;
+using CRM.CRMLite.ClientServices.Interfaces.Mappers;
+using CRM.ClientFirstLite.Model.DOTNET.Contacts;
+using CRM.ClientFirstLite.Model.DOTNET.Opportunities;
+using System.Collections.Generic;
+using CRM.ClientFirstLite.Model.DOTNET.Common;
+using System.Windows;
+using CRM.ClientFirstLite.Model.DOTNET.Interactions;
+
+namespace CRM.CRMLite.Modules.Common.AccessAndVisibilityGuide
+{
+    public class AccessAndVisibilityGuideViewModel : DialogViewModelBase
+    {
+        #region PRIVATE PROPERTIES
+
+        private IVisibilityGuidelines Model { get; set; }
+        private readonly IUserAuthenticationService _userAuthenticationService;
+        private readonly IEmployeeService _employeeService;
+        private string _searchText;
+        private ObservableCollection<ClientFirstLite.Model.DOTNET.Common.AccessList> _accessList
+            = new ObservableCollection<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+        private ObservableCollection<Employee> _employees;
+        private string _visibilityMessage;
+        private readonly IOpportunityService _opportunityService;
+        private readonly IInteractionService _interactionService;
+        private readonly IPermissionService _permissionService;
+
+        // Tracks the full existing access list for save operations
+        private List<ClientFirstLite.Model.DOTNET.Common.AccessList> _existingAccessList
+            = new List<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+
+        // Tracks IDs added specifically via the team checkbox in THIS session
+        private HashSet<string> _teamCheckboxAddedIds = new HashSet<string>();
+
+        // Checkbox state
+        private bool _addTeamMembers;
+
+        // Flag to prevent duplicate event subscription on multiple checkbox toggles
+        private bool _isTeamMembersEventSubscribed = false;
+
+        #endregion
+
+        #region PUBLIC PROPERTIES
+
+        public string SearchText
+        {
+            get => _searchText;
+            set => this.RaiseAndSetIfChanged(x => x.SearchText, ref _searchText, value);
+        }
+
+        public ObservableCollection<ClientFirstLite.Model.DOTNET.Common.AccessList> AccessList
+        {
+            get => _accessList;
+            set => this.RaiseAndSetIfChanged(x => x.AccessList, ref _accessList, value);
+        }
+
+        public ObservableCollection<Employee> Employees
+        {
+            get => _employees;
+            set => this.RaiseAndSetIfChanged(x => x.Employees, ref _employees, value);
+        }
+
+        public string VisibilityMessage
+        {
+            get => _visibilityMessage;
+            set => this.RaiseAndSetIfChanged(x => x.VisibilityMessage, ref _visibilityMessage, value);
+        }
+
+        /// <summary>
+        /// Bound to the "Add all team members" checkbox.
+        /// When checked: adds all active team members to the access list.
+        /// When unchecked: removes only those added via the checkbox in this session.
+        /// </summary>
+        public bool AddTeamMembers
+        {
+            get => _addTeamMembers;
+            set
+            {
+                if (this.RaiseAndSetIfChanged(x => x.AddTeamMembers, ref _addTeamMembers, value))
+                {
+                    if (value)
+                        AddTeamMembersToAccessList();
+                    else
+                        RemoveTeamMembersAddedByCheckbox();
+                }
+            }
+        }
+
+        #endregion
+
+        #region CONSTRUCTOR
+
+        public AccessAndVisibilityGuideViewModel(
+            IUserAuthenticationService userAuthenticationService,
+            IEmployeeService employeeService,
+            IDialogService dialogService,
+            IPermissionService permissionService,
+            IOpportunityService opportunityService,
+            IInteractionService interactionService)
+        {
+            _userAuthenticationService = userAuthenticationService;
+            _employeeService = employeeService;
+            _opportunityService = opportunityService;
+            _permissionService = permissionService;
+            _interactionService = interactionService;
+        }
+
+        #endregion
+
+        #region INIT
+
+        public void Init(IVisibilityGuidelines model)
+        {
+            Model = model;
+
+            if (Model.VisibilityModule == "Opportunity")
+            {
+                DialogTitle = "Opportunity Visibility";
+                VisibilityMessage = Properties.Resources.ResourceManager.GetString(
+                    _permissionService.ActiveBusinessArea + Model.VisibilityGuidelinesMessageKey);
+            }
+            else if (Model.VisibilityModule == "Interaction")
+            {
+                DialogTitle = "Interaction Visibility";
+                VisibilityMessage = Properties.Resources.ResourceManager.GetString(
+                    Model.VisibilityGuidelinesMessageKey);
+            }
+
+            SetupCommands();
+            LoadAccessList();
+
+            // Reset session state on every open — checkbox state is inferred
+            // from loaded data in HandleLoadAccessList, not set here
+            _addTeamMembers = false;
+            _teamCheckboxAddedIds.Clear();
+            _isTeamMembersEventSubscribed = false;
+        }
+
+        #endregion
+
+        #region INIT COMMANDS
+
+        private void SetupCommands()
+        {
+            CancelSearchCommand = new DelegateCommand(_ => { CancellationTokenSource?.Cancel(true); });
+            SearchCommand = new DelegateCommand<SearchCommandParameter>(ExecuteSearch);
+            SelectEntitiesCommand = new DelegateCommand(ExecuteSelectEntities);
+            CancelCommand = new DelegateCommand(_ => CloseDialog(true));
+            SaveCommand = new DelegateCommand(_ => PerformSave());
+            RemoveAccessListItemCommand = new DelegateCommand(RemoveAccessListItem);
+        }
+
+        #endregion
+
+        #region TEAM MEMBERS CHECKBOX
+
+        private void AddTeamMembersToAccessList()
+        {
+            // FIX: Unsubscribe before subscribing to prevent duplicate firings
+            // when checkbox is toggled multiple times in one session
+            if (_isTeamMembersEventSubscribed)
+            {
+                _userAuthenticationService.RetrieveTeamMembersCompleted -= OnTeamMembersRetrieved;
+                _isTeamMembersEventSubscribed = false;
+            }
+
+            _userAuthenticationService.RetrieveTeamMembersCompleted += OnTeamMembersRetrieved;
+            _isTeamMembersEventSubscribed = true;
+            _userAuthenticationService.RetrieveTeamMembers();
+        }
+
+        private void OnTeamMembersRetrieved(object sender, TeamMembersRetrievedEventArgs e)
+        {
+            // Always unsubscribe after firing to prevent duplicate entries
+            // on subsequent checkbox toggles
+            _userAuthenticationService.RetrieveTeamMembersCompleted -= OnTeamMembersRetrieved;
+            _isTeamMembersEventSubscribed = false;
+
+            var teamMembers = e.TeamMembers ?? new List<TeamMember>();
+            var existingIds = _accessList.Select(x => x.EmployeeId).ToHashSet();
+
+            // Use current user's team name — all fetched members belong to same team
+            // GetTeamMembers API does not return team name field
+            var currentUserTeamName = _userAuthenticationService.Context?.TeamName
+                ?? string.Empty;
+
+            var newEntries = new List<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+
+            foreach (var tm in teamMembers)
+            {
+                // FIX: Skip members without PositionId or EmployeeId
+                // Siebel silently drops rows without these values — this fixes
+                // the count mismatch (70 shown vs 61 saved)
+                if (string.IsNullOrWhiteSpace(tm.PositionId) ||
+                    string.IsNullOrWhiteSpace(tm.EmployeeId))
+                    continue;
+
+                // FIX: Skip inactive members — Siebel rejects them silently
+                if (!string.IsNullOrWhiteSpace(tm.Status) &&
+                    !tm.Status.Equals("Active", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Skip if already in the grid
+                if (existingIds.Contains(tm.EmployeeId))
+                    continue;
+
+                // Skip duplicates within the team members list itself
+                if (_teamCheckboxAddedIds.Contains(tm.EmployeeId))
+                    continue;
+
+                var entry = new ClientFirstLite.Model.DOTNET.Common.AccessList
+                {
+                    EmployeeId = tm.EmployeeId,
+                    EmployeeName = tm.FullName,
+                    PositionId = tm.PositionId,
+                    TeamName = currentUserTeamName,
+                    VisibilityRule = "Manually Added",
+                    AddedBy = _userAuthenticationService.GetUserFullName(),
+                    IsManuallyAdded = true,
+                    CanDelete = true
+                };
+
+                newEntries.Add(entry);
+                _teamCheckboxAddedIds.Add(entry.EmployeeId);
+            }
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                foreach (var entry in newEntries)
+                {
+                    AccessList.Insert(0, entry);
+                    _existingAccessList.Add(entry);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Removes only rows added by the checkbox IN THIS SESSION.
+        /// Two conditions must both be true to remove a row:
+        /// 1. ID is in _teamCheckboxAddedIds (added via checkbox this session)
+        /// 2. VisibilityRule is "Manually Added"
+        /// Pre-existing "System Added" rows and individually searched rows are never touched.
+        /// </summary>
+        private void RemoveTeamMembersAddedByCheckbox()
+        {
+            if (_teamCheckboxAddedIds == null || _teamCheckboxAddedIds.Count == 0)
+                return;
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var toRemove = AccessList
+                    .Where(al =>
+                        al.EmployeeId != null &&
+                        _teamCheckboxAddedIds.Contains(al.EmployeeId) &&
+                        al.VisibilityRule == "Manually Added")
+                    .ToList();
+
+                foreach (var item in toRemove)
+                {
+                    AccessList.Remove(item);
+                    _existingAccessList.RemoveAll(a => a.EmployeeId == item.EmployeeId);
+                }
+
+                _teamCheckboxAddedIds.Clear();
+            });
+        }
+
+        /// <summary>
+        /// Infers checkbox checked state after loading the access list.
+        /// Equivalent to Angular's _inferCheckboxState.
+        /// Checkbox is checked if at least one active team member exists
+        /// in the loaded list as Manually Added.
+        /// Also repopulates _teamCheckboxAddedIds for the reopen-then-uncheck scenario.
+        /// </summary>
+        private void InferCheckboxState(
+            IEnumerable<ClientFirstLite.Model.DOTNET.Common.AccessList> loadedList,
+            IEnumerable<TeamMember> teamMembers)
+        {
+            // Build set of valid active team member IDs
+            var validTeamMemberIds = new HashSet<string>(
+                teamMembers
+                    .Where(tm =>
+                        !string.IsNullOrWhiteSpace(tm.PositionId) &&
+                        !string.IsNullOrWhiteSpace(tm.EmployeeId) &&
+                        (string.IsNullOrWhiteSpace(tm.Status) ||
+                         tm.Status.Equals("Active", StringComparison.OrdinalIgnoreCase)))
+                    .Select(tm => tm.EmployeeId)
+            );
+
+            if (validTeamMemberIds.Count == 0)
+            {
+                // Silently set backing field — don't trigger property setter
+                // which would call Add/RemoveTeamMembers
+                _addTeamMembers = false;
+                return;
+            }
+
+            var loadedListArray = loadedList.ToList();
+
+            // Checkbox was previously checked if at least one active team member
+            // is present in the saved list as Manually Added
+            var atLeastOnePresent = loadedListArray.Any(al =>
+                al.EmployeeId != null &&
+                validTeamMemberIds.Contains(al.EmployeeId) &&
+                al.IsManuallyAdded);
+
+            // Set backing field directly — avoids triggering Add/Remove via setter
+            _addTeamMembers = atLeastOnePresent;
+
+            if (atLeastOnePresent)
+            {
+                // Repopulate tracking set so uncheck works correctly after reopen
+                // Only track rows that are Manually Added team members
+                foreach (var al in loadedListArray)
+                {
+                    if (al.EmployeeId != null &&
+                        validTeamMemberIds.Contains(al.EmployeeId) &&
+                        al.VisibilityRule == "Manually Added")
+                    {
+                        _teamCheckboxAddedIds.Add(al.EmployeeId);
+                    }
+                }
+            }
+
+            // Notify UI that AddTeamMembers changed without triggering side effects
+            this.RaisePropertyChanged(x => x.AddTeamMembers);
+        }
+
+        #endregion
+
+        #region LOAD ACCESS LIST
+
+        private void LoadAccessList()
+        {
+            IsBusy = true;
+
+            if (Model.VisibilityModule == "Opportunity")
+            {
+                _opportunityService.GetOpportunityAccessListById(
+                    Model.SearchId, HandleLoadExistingAccessList);
+
+                _opportunityService.GetOpportunityAccessVisibilityListByOppyId(
+                    Model.SearchId,
+                    Model.VisibilityModule,
+                    _permissionService.ActiveBusinessArea,
+                    HandleLoadAccessList);
+            }
+            else if (Model.VisibilityModule == "Interaction" && Model is InteractionModel interaction)
+            {
+                if (string.IsNullOrWhiteSpace(interaction.InteractionId))
+                {
+                    if (interaction.AccessList?.Any() == true)
+                    {
+                        HandleLoadAccessList(interaction.AccessList);
+                        HandleLoadExistingAccessList(interaction.AccessList);
+                    }
+                    IsBusy = false;
+                }
+                else
+                {
+                    _interactionService.GetCallLogAccessListsAsync(
+                        Model.SearchId, HandleLoadExistingAccessList);
+
+                    _interactionService.GetInteractionAccessVisibilityListByInteractionId(
+                        Model.SearchId,
+                        Model.VisibilityModule,
+                        _userAuthenticationService.Context.GlobalUserId,
+                        _permissionService.ActiveBusinessArea,
+                        HandleLoadAccessList);
+                }
+            }
+        }
+
+        private void HandleLoadExistingAccessList(
+            IEnumerable<ClientFirstLite.Model.DOTNET.Common.AccessList> existingAccessList)
+        {
+            _existingAccessList = existingAccessList?.ToList()
+                ?? new List<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+        }
+
+        private void HandleLoadAccessList(
+            IEnumerable<ClientFirstLite.Model.DOTNET.Common.AccessList> results)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var resultList = results?.ToList()
+                    ?? new List<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+
+                AccessList = new ObservableCollection<
+                    ClientFirstLite.Model.DOTNET.Common.AccessList>(resultList);
+
+                IsBusy = false;
+
+                // Infer checkbox state after loading — needs team members
+                // Fetch team members to compare against loaded list
+                _userAuthenticationService.RetrieveTeamMembersCompleted
+                    += OnTeamMembersRetrievedForInference;
+                _userAuthenticationService.RetrieveTeamMembers();
+            });
+        }
+
+        private void OnTeamMembersRetrievedForInference(
+            object sender, TeamMembersRetrievedEventArgs e)
+        {
+            _userAuthenticationService.RetrieveTeamMembersCompleted
+                -= OnTeamMembersRetrievedForInference;
+
+            var teamMembers = e.TeamMembers ?? new List<TeamMember>();
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                InferCheckboxState(AccessList, teamMembers);
+            });
+        }
+
+        #endregion
+
+        #region SAVE
+
+        private void PerformSave()
+        {
+            StatusMessage = Properties.Resources.SavingAccessListMessage;
+
+            // FIX: Deduplicate by EmployeeId before saving
+            // Prevents duplicate rows reaching Siebel which drops them silently
+            var seen = new HashSet<string>();
+            var deduplicatedList = _existingAccessList
+                .Where(al =>
+                {
+                    if (string.IsNullOrWhiteSpace(al.EmployeeId) ||
+                        seen.Contains(al.EmployeeId))
+                        return false;
+                    seen.Add(al.EmployeeId);
+                    return true;
+                })
+                .ToList();
+
+            if (Model is OpportunityBase opportunityBase)
+            {
+                IsBusy = true;
+                _opportunityService.UpsertAccessListForOpportunityAsync(
+                    opportunityBase,
+                    deduplicatedList,
+                    callBack =>
+                    {
+                        IsBusy = false;
+                        CloseDialog(true);
+                    });
+            }
+            else if (Model is InteractionModel interaction)
+            {
+                IsBusy = true;
+
+                if (string.IsNullOrWhiteSpace(interaction.InteractionId))
+                {
+                    if (interaction.AccessList == null)
+                        interaction.AccessList =
+                            new List<ClientFirstLite.Model.DOTNET.Common.AccessList>();
+
+                    interaction.AccessList.Clear();
+                    interaction.AccessList.AddRange(deduplicatedList);
+                    IsBusy = false;
+                    CloseDialog(true);
+                }
+                else
+                {
+                    _interactionService.SaveAccessList(
+                        interaction.InteractionId,
+                        deduplicatedList,
+                        callBack =>
+                        {
+                            IsBusy = false;
+                            CloseDialog(true);
+                        });
+                }
+            }
+        }
+
+        #endregion
+
+        #region SEARCH & SELECT
+
+        private void ExecuteSearch(SearchCommandParameter searchParameter)
+        {
+            CancellationTokenSource?.Cancel(true);
+            CancellationTokenSource = new CancellationTokenSource();
+
+            var existingEmployees = AccessList.Select(x => x.EmployeeId).ToList();
+
+            _employeeService.SearchEmployees(
+                _userAuthenticationService.Context.TeamId,
+                SearchText,
+                CancellationTokenSource.Token)
+                .ContinueWith(obj =>
+                {
+                    if (obj != null)
+                    {
+                        var employees = Enumerable.Empty<Employee>();
+
+                        if (obj?.Result != null &&
+                            obj.Result.Employees != null &&
+                            obj.Result.Employees.Any())
+                        {
+                            employees = obj.Result.Employees.Where(e =>
+                                !string.IsNullOrWhiteSpace(e.PrimaryPositionId) &&
+                                existingEmployees.All(x => x != e.Id));
+                        }
+
+                        if (!employees.Any())
+                        {
+                            employees = Enumerable.Empty<Employee>();
+                            searchParameter.ShowEmptyResultMessage();
+                        }
+
+                        Employees = new ObservableCollection<Employee>(employees);
+                    }
+
+                    searchParameter.FetchComplete();
+                    CancellationTokenSource = null;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.NotOnCanceled,
+                TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        private void ExecuteSelectEntities(object obj)
+        {
+            if (obj == null) return;
+            if (!(obj is ObservableCollection<object> entities)) return;
+
+            var result = new ObservableCollection<ClientFirstLite.Model.DOTNET.Common.AccessList>(
+                entities.OfType<Employee>().Select(emp =>
+                    AccessListMapper.MapFromEmployeeWithVisibilityData(
+                        emp,
+                        _userAuthenticationService.GetUserFullName(),
+                        null,
+                        true)));
+
+            foreach (var item in result)
+            {
+                AccessList.Insert(0, item);
+                _existingAccessList.Add(item);
+            }
+        }
+
+        #endregion
+
+        #region REMOVE ROW
+
+        private void RemoveAccessListItem(object obj)
+        {
+            if (obj is ClientFirstLite.Model.DOTNET.Common.AccessList accessListItem)
+            {
+                AccessList.Remove(accessListItem);
+                _existingAccessList.RemoveAll(a => a.EmployeeId == accessListItem.EmployeeId);
+
+                // If item was added via team checkbox, remove from tracking
+                // and uncheck the box — consistent with Angular deleteRow behaviour
+                if (accessListItem.EmployeeId != null &&
+                    _teamCheckboxAddedIds != null &&
+                    _teamCheckboxAddedIds.Contains(accessListItem.EmployeeId))
+                {
+                    _teamCheckboxAddedIds.Remove(accessListItem.EmployeeId);
+
+                    // Uncheck without triggering RemoveTeamMembersAddedByCheckbox
+                    // User removed manually — remaining members stay in grid
+                    _addTeamMembers = false;
+                    this.RaisePropertyChanged(x => x.AddTeamMembers);
+                }
+            }
+        }
+
+        #endregion
+
+        #region COMMANDS
+
+        public ICommand SaveCommand { get; set; }
+        public ICommand CancelCommand { get; set; }
+        public ICommand CancelSearchCommand { get; set; }
+        public ICommand SearchCommand { get; set; }
+        public ICommand SelectEntitiesCommand { get; private set; }
+        public ICommand RemoveAccessListItemCommand { get; private set; }
+
+        #endregion
+    }
+}
