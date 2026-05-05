@@ -1,3 +1,74 @@
+private void RemoveTeamMembersAddedByCheckbox()
+{
+    System.Diagnostics.Debug.WriteLine($"=== RemoveTeamMembersAddedByCheckbox called ===");
+    System.Diagnostics.Debug.WriteLine($"_teamCheckboxAddedIds count: {_teamCheckboxAddedIds?.Count ?? 0}");
+    
+    if (_teamCheckboxAddedIds != null)
+    {
+        foreach (var id in _teamCheckboxAddedIds)
+            System.Diagnostics.Debug.WriteLine($"  Tracking ID: '{id}'");
+    }
+
+    foreach (var al in AccessList)
+        System.Diagnostics.Debug.WriteLine($"  Grid row - EmployeeId: '{al.EmployeeId}', VisibilityRule: '{al.VisibilityRule}', IsManuallyAdded: {al.IsManuallyAdded}");
+
+    if (_teamCheckboxAddedIds == null || _teamCheckboxAddedIds.Count == 0)
+    {
+        System.Diagnostics.Debug.WriteLine("EARLY EXIT - tracking set empty");
+        return;
+    }
+
+    Application.Current.Dispatcher.Invoke(() =>
+    {
+        var toRemove = AccessList
+            .Where(al =>
+                al.EmployeeId != null &&
+                _teamCheckboxAddedIds.Contains(al.EmployeeId) &&
+                al.VisibilityRule?.Trim().Equals(
+                    "Manually Added", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+
+        System.Diagnostics.Debug.WriteLine($"Rows matched for removal: {toRemove.Count}");
+
+        foreach (var item in toRemove)
+        {
+            AccessList.Remove(item);
+            _existingAccessList.RemoveAll(a => a.EmployeeId == item.EmployeeId);
+        }
+
+        _teamCheckboxAddedIds.Clear();
+    });
+}
+
+
+
+if (atLeastOnePresent)
+{
+    _teamCheckboxAddedIds.Clear();
+
+    foreach (var al in loadedListArray)
+    {
+        System.Diagnostics.Debug.WriteLine($"Checking al - EmployeeId: '{al.EmployeeId}', inValidSet: {al.EmployeeId != null && validTeamMemberIds.Contains(al.EmployeeId)}, VisibilityRule: '{al.VisibilityRule}'");
+        
+        if (al.EmployeeId != null &&
+            validTeamMemberIds.Contains(al.EmployeeId) &&
+            al.VisibilityRule?.Trim().Equals(
+                "Manually Added", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            _teamCheckboxAddedIds.Add(al.EmployeeId);
+            System.Diagnostics.Debug.WriteLine($"  --> Added to tracking: '{al.EmployeeId}'");
+        }
+    }
+
+    System.Diagnostics.Debug.WriteLine($"After InferCheckboxState - tracking set count: {_teamCheckboxAddedIds.Count}");
+          }
+
+
+
+
+
+
+
 
 import { vi, expect as vitestExpect } from 'vitest';
 
