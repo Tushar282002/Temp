@@ -1,4 +1,83 @@
 protected saveUpdatedAccessList() {
+  // Snapshot immediately before anything can mutate the list
+  const snapshot = this.accessListRowData();
+  
+  const seen = new Set<string>();
+  const manuallyAddedUsers = snapshot
+    .filter(al => al.isManuallyAdded)
+    .filter(al => {
+      if (!al.id || seen.has(al.id)) return false;
+      seen.add(al.id);
+      return true;
+    });
+
+  if (this.isOpportunity) {
+    let dialogData: IOpportunityModel | undefined;
+    if ('opportunity' in this.dialogData && this.dialogData.opportunity) {
+      dialogData = this.dialogData.opportunity as IOpportunityModel;
+    } else {
+      dialogData = this.dialogData as IOpportunityModel;
+    }
+
+    const request: UpdateOpportunityAccessListRequest = {
+      opportunityId: this.opportunityId,
+      accountId: dialogData?.client?.clientId,
+      description: dialogData?.opportunityTitle ?? this.opportunityTitle,
+      sensitivity: this.privacyLevel,
+      newAcesses: manuallyAddedUsers
+    };
+
+    this.processApiCall(
+      this.opportunityWriteService.updateOpportunityAccessList(request),
+      'Error Updating opportunity access list',
+      () => this.closeDialog()
+    );
+  } else {
+    let dialogData: Interaction | undefined;
+    if ('interaction' in this.dialogData && this.dialogData.interaction) {
+      dialogData = this.dialogData.interaction as Interaction;
+    }
+
+    if (!this.interactionId || this.interactionId.trim() === '') {
+      if (dialogData) {
+        dialogData.accessList ??= [];
+        dialogData.accessList = manuallyAddedUsers;
+      }
+      this.RemoveIsBusy();
+      this.closeDialog();
+    } else {
+      const request: UpdateInteractionAccessListRequest = {
+        interactionId: this.interactionId,
+        accountId: dialogData?.clientId,
+        description: dialogData?.interactionSubject ?? this.interactionSubject,
+        sensitivity: dialogData?.privacyFlag ?? this.privacyLevel,
+        newAcesses: manuallyAddedUsers
+      };
+
+      this.AddIsBusy();
+      this.interactionWriteService.updateInteractionAccessList(request)
+        .pipe(takeUntil(this.destroy$), finalize(() => this.RemoveIsBusy()))
+        .subscribe({
+          next: (result: any) => {
+            if (!result) this.closeDialog();
+          }
+        });
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+protected saveUpdatedAccessList() {
   const seen = new Set<string>();
   const manuallyAddedUsers = this.accessListRowData()
     .filter(al => al.isManuallyAdded)
