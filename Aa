@@ -1,4 +1,48 @@
 protected saveUpdatedAccessList() {
+  if (this.isOpportunity) {
+    // ... opportunity path unchanged ...
+  } else {
+    // ✅ Mirror the opportunity component: only send manually added entries
+    const allManuallyAdded = this.accessListRowData().filter(al => al.isManuallyAdded);
+    const seen = new Set<string>();
+    const manuallyAddedUsers = allManuallyAdded.filter(al => {
+      if (!al.id || seen.has(al.id)) return false;
+      seen.add(al.id);
+      return true;
+    });
+
+    let dialogData: Interaction | undefined;
+    if ('interaction' in this.dialogData && this.dialogData.interaction) {
+      dialogData = this.dialogData.interaction as Interaction;
+    }
+
+    if (!this.interactionId || this.interactionId.trim() === '') {
+      if (dialogData) {
+        dialogData.accessList ??= [];
+        dialogData.accessList = manuallyAddedUsers; // ✅ was deduplicatedList
+      }
+      this.RemoveIsBusy();
+      this.closeDialog();
+    } else {
+      const request: UpdateInteractionAccessListRequest = {
+        interactionId: this.interactionId,
+        accountId: dialogData?.clientId,
+        description: dialogData?.interactionSubject ?? this.interactionSubject,
+        sensitivity: dialogData?.privacyFlag ?? this.privacyLevel,
+        newAcesses: manuallyAddedUsers  // ✅ was deduplicatedList
+      };
+      // ... rest unchanged
+    }
+  }
+}
+
+
+
+
+
+
+
+protected saveUpdatedAccessList() {
   // Snapshot immediately before anything can mutate the list
   const snapshot = this.accessListRowData();
   
