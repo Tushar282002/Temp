@@ -1,3 +1,52 @@
+using System;
+using System.Globalization;
+using System.Windows.Data;
+using CRM.CRMLite.Common.Windows.Helpers;
+
+namespace CRM.CRMLite.Common.Converters
+{
+    public class DateOnlyInRegionalFormat : IValueConverter
+    {
+        private static readonly string[] SiebelExplicitFormats =
+            { "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy" };
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value == null)
+                return null;
+
+            var stringValue = System.Convert.ToString(value);
+
+            if (string.IsNullOrWhiteSpace(stringValue))
+                return null;
+
+            DateTime returnValue;
+
+            // Try strict Siebel format first (handles raw NewValue strings)
+            bool parsed = DateTime.TryParseExact(stringValue, SiebelExplicitFormats,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out returnValue);
+
+            // Fall back to loose parse (handles already-typed DateTime values like ModificationDate)
+            if (!parsed)
+                parsed = DateTime.TryParse(stringValue, out returnValue);
+
+            if (!parsed || returnValue == DateTime.MinValue)
+                return value; // not a date at all (e.g. "ABC, Rakesh") — return original untouched
+
+            return returnValue.ToString(DateHelper.GetCurrentCultureDateFormat());
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+}
+
+
+
+
+
 private void RemoveTeamMembersAddedByCheckbox()
 {
     System.Diagnostics.Debug.WriteLine($"=== RemoveTeamMembersAddedByCheckbox called ===");
