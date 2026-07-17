@@ -1,3 +1,39 @@
+// plain method — reusable, callable directly
+private runSearchExpansion(term: string): void {
+  const t = term.toLowerCase();
+  if (!this.gridApi) return;
+
+  this.gridApi.setGridOption('findSearchValue', t);
+  this.gridApi.forEachNode((node) => {
+    const client = node.data as IMarketingClient;
+    if (!client) return;
+    const level = this.findMatchLevel(client, t);
+    node.setExpanded(level === 1 || level === 2);
+  });
+
+  (this.gridApi as any).forEachDetailGridInfo?.((info: any) => {
+    const detailApi = info.api;
+    if (!detailApi) return;
+    detailApi.setGridOption('findSearchValue', t);
+    detailApi.forEachNode((n: any) => {
+      const crds = n.data as CrdsEntity;
+      const hasNle = !!t && (crds.nonLegalEntities ?? []).some(
+        (x: any) => (x.crdsCode ?? '').toLowerCase().includes(t) || (x.crdsName ?? '').toLowerCase().includes(t),
+      );
+      n.setExpanded(hasNle);
+    });
+    (detailApi as any).forEachDetailGridInfo?.((inner: any) => inner.api?.setGridOption('findSearchValue', t));
+  });
+}
+
+// effect just reacts to the signal and delegates
+private readonly searchExpansionEffect = effect(() => {
+  const term = this.searchTerm();
+  this.runSearchExpansion(term ?? '');
+});
+
+
+
 private findMatchLevel(client: IMarketingClient, term: string): 0 | 1 | 2 | -1 {
   const t = term.trim().toLowerCase();
   if (!t) return -1;
