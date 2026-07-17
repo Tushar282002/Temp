@@ -2,6 +2,37 @@ private findMatchLevel(client: IMarketingClient, term: string): 0 | 1 | 2 | -1 {
   const t = term.trim().toLowerCase();
   if (!t) return -1;
 
+  // level 0 — does the match appear in any visible top-level column?
+  const clientMatches = this.columnDefs.some((col) => {
+    const field = (col as any).field as string | undefined;
+    if (!field) return false;
+    const value = (client as any)[field];
+    return value != null && value.toString().toLowerCase().includes(t);
+  });
+  if (clientMatches) return 0;
+
+  // level 1 & 2 — walk the crdsCodes tree
+  for (const crds of client.crdsCodes ?? []) {
+    const nleMatch = (crds.nonLegalEntities ?? []).some(
+      (n) => (n.crdsCode ?? '').toLowerCase().includes(t) || (n.crdsName ?? '').toLowerCase().includes(t),
+    );
+    if (nleMatch) return 2;
+
+    const crdsMatch = (crds.crdsCode ?? '').toLowerCase().includes(t) || (crds.crdsName ?? '').toLowerCase().includes(t);
+    if (crdsMatch) return 1;
+  }
+  return -1;
+}
+
+
+
+
+
+
+private findMatchLevel(client: IMarketingClient, term: string): 0 | 1 | 2 | -1 {
+  const t = term.trim().toLowerCase();
+  if (!t) return -1;
+
   if ((client.name ?? '').toLowerCase().includes(t)) return 0; // adjust to real field
 
   for (const crds of client.crdsCodes ?? []) {
