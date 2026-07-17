@@ -1,3 +1,88 @@
+private findMatchLevel(client: IMarketingClient, term: string): 0 | 1 | 2 | -1 {
+  const t = term.trim().toLowerCase();
+  if (!t) return -1;
+
+  if ((client.name ?? '').toLowerCase().includes(t)) return 0; // adjust to real field
+
+  for (const crds of client.crdsCodes ?? []) {
+    const nleMatch = (crds.nonLegalEntities ?? []).some(
+      (n) => (n.crdsCode ?? '').toLowerCase().includes(t) || (n.crdsName ?? '').toLowerCase().includes(t),
+    );
+    if (nleMatch) return 2;
+
+    const crdsMatch = (crds.crdsCode ?? '').toLowerCase().includes(t) || (crds.crdsName ?? '').toLowerCase().includes(t);
+    if (crdsMatch) return 1;
+  }
+  return -1;
+}
+
+
+
+private readonly syncSearchExpansion = effect(() => {
+  const term = this.searchTerm().toLowerCase();
+  if (!this.gridApi) return;
+
+  this.gridApi.setGridOption('findSearchValue', term);
+  this.gridApi.forEachNode((node) => {
+    const client = node.data as IMarketingClient;
+    if (!client) return;
+    const level = this.findMatchLevel(client, term);
+    node.setExpanded(level === 1 || level === 2); // expand only to reveal a real match
+  });
+
+  // any level-2 grids already open
+  (this.gridApi as any).forEachDetailGridInfo?.((info: any) => {
+    const detailApi = info.api;
+    if (!detailApi) return;
+    detailApi.setGridOption('findSearchValue', term);
+    detailApi.forEachNode((n: any) => {
+      const crds = n.data as CrdsEntity;
+      const hasNle = !!term && (crds.nonLegalEntities ?? []).some(
+        (x: any) => (x.crdsCode ?? '').toLowerCase().includes(term) || (x.crdsName ?? '').toLowerCase().includes(term),
+      );
+      n.setExpanded(hasNle); // level 3 only expands if the match is actually inside it
+    });
+    (detailApi as any).forEachDetailGridInfo?.((inner: any) => inner.api?.setGridOption('findSearchValue', term));
+  });
+});
+
+
+
+
+detailCellRendererParams = computed(() => {
+  const term = this.searchTerm().toLowerCase();
+  return {
+    getDetailRowData: (p: any) => p.successCallback(p.data?.crdsCodes ?? []),
+    detailGridOptions: {
+      columnDefs: [
+        { cellRenderer: 'agGroupCellRenderer', width: 20 },
+        { field: 'crdsCode', headerName: 'CRDS Code', sortable: true },
+        { field: 'crdsName', headerName: 'CRDS Name', minWidth: 400, flex: 1, sortable: true },
+      ],
+      masterDetail: true,
+      detailRowAutoHeight: true,
+      findSearchValue: term,
+      isRowMaster: (row: CrdsEntity) => !!row?.nonLegalEntities?.length,
+      onFirstDataRendered: (p: any) => {
+        if (!term) return;
+        p.api.forEachNode((n: any) => {
+          const crds = n.data as CrdsEntity;
+          n.setExpanded((crds.nonLegalEntities ?? []).some(
+            (x: any) => (x.crdsCode ?? '').toLowerCase().includes(term) || (x.crdsName ?? '').toLowerCase().includes(term),
+          ));
+        });
+      },
+      detailCellRendererParams: {
+        getDetailRowData: (p: any) => p.successCallback(p.data?.nonLegalEntities ?? []),
+        detailGridOptions: { columnDefs: [ /* same crdsCode/crdsName cols */ ], masterDetail: false, findSearchValue: term },
+      },
+    } as GridOptions,
+  };
+});
+
+
+
+
 using System;
 using System.Globalization;
 using System.Windows.Data;
