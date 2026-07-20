@@ -1,3 +1,53 @@
+onGridRowDataUpdated(event?: any): void {
+  this.syncRowExpansion();
+}
+
+private syncRowExpansion(): void {
+  const term = (this.currentSearchTerm ?? '').trim();
+  if (!this.gridApi) return;
+
+  this.gridApi.forEachNode((masterNode) => {
+    const data = masterNode.data as IMarketingClient;
+    const crdsCodes = data?.crdsCodes ?? [];
+
+    const masterHasMatch =
+      !!term && crdsCodes.some((c: any) => searchObjectProperties(c, term));
+    masterNode.setExpanded(masterHasMatch);
+
+    // If this row's crdsCodes detail grid already exists (was previously
+    // expanded), sync its inner NLE expansion state too — onFirstDataRendered
+    // won't refire on an existing grid, so we must update it manually.
+    const detailInfo = this.gridApi.getDetailGridInfo(`detail_${masterNode.id}`);
+    const detailApi = detailInfo?.api;
+    if (detailApi) {
+      detailApi.forEachNode((crdsNode: any) => {
+        const nleMatch =
+          !!term && crdsNode.data?.nonLegalEntities?.some((nle: any) =>
+            searchObjectProperties(nle, term)
+          );
+        crdsNode.setExpanded(nleMatch);
+      });
+    }
+  });
+}onFirstDataRendered: (params: any) => {
+  const term = (this.currentSearchTerm ?? '').trim();
+
+  params.api.forEachNode((node: any) => {
+    const nleMatch =
+      !!term && node.data?.nonLegalEntities?.some((nle: any) =>
+        searchObjectProperties(nle, term)
+      );
+    node.setExpanded(nleMatch);
+  });
+},
+
+
+
+
+
+
+
+
 private gridApi!: GridApi;
 private currentSearchTerm = '';
 
