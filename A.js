@@ -1,3 +1,89 @@
+private gridApi!: GridApi;
+private currentSearchTerm = '';
+
+clientGridReady(event: any): void {
+  this.gridApi = event.api;
+}
+
+onGridRowDataUpdated(): void {
+  this.expandMatchingRows();
+}
+
+private expandMatchingRows(): void {
+  const term = (this.currentSearchTerm ?? '').trim();
+  if (!term || !this.gridApi) return;
+
+  this.gridApi.forEachNode((node) => {
+    const data = node.data as IMarketingClient;
+    if (!data?.crdsCodes?.length) return;
+
+    const hasMatch = data.crdsCodes.some((c: any) => searchObjectProperties(c, term));
+    if (hasMatch) {
+      node.setExpanded(true);
+    }
+  });
+}
+
+
+
+const filtersForm = filters.form;
+this.currentSearchTerm = filtersForm?.get(clientFilterKeys.search)?.value ?? '';
+
+
+detailCellRendererParams = computed(() => {
+  const innerDetailParams = {
+    detailGridOptions: {
+      columnDefs: [
+        { field: 'crdsCode', headerName: 'CRDS Code', sortable: true },
+        { field: 'crdsName', headerName: 'CRDS Name', minWidth: 400, flex: 1, sortable: true },
+      ],
+      masterDetail: false,
+    },
+    getDetailRowData: (innerParams: any) =>
+      innerParams.successCallback(innerParams.data?.nonLegalEntities),
+  };
+
+  return {
+    detailGridOptions: {
+      columnDefs: [
+        { cellRenderer: 'agGroupCellRenderer', width: 20 },
+        { field: 'crdsCode', headerName: 'CRDS Code', sortable: true },
+        { field: 'crdsName', headerName: 'CRDS Name', minWidth: 400, flex: 1, sortable: true },
+      ],
+      masterDetail: true,
+      detailCellRendererParams: innerDetailParams,
+      isRowMaster: (param: any): boolean => {
+        const row = param as CrdsEntity;
+        return !!row?.nonLegalEntities?.length;
+      },
+      getDetailRowData: (params: any) =>
+        params.successCallback(params.data?.crdsCodes),
+
+      // NEW — expand NLE rows whose crdsCode/crdsName matched the search term
+      onFirstDataRendered: (params: any) => {
+        const term = (this.currentSearchTerm ?? '').trim();
+        if (!term) return;
+
+        params.api.forEachNode((node: any) => {
+          if (searchObjectProperties(node.data, term)) {
+            node.setExpanded(true);
+          }
+        });
+      },
+    } as GridOptions,
+  };
+});
+
+
+
+
+
+
+
+
+
+
+
 // plain method — reusable, callable directly
 private runSearchExpansion(term: string): void {
   const t = term.toLowerCase();
