@@ -1,3 +1,29 @@
+see I am working on clients module and in this module there is a search bar and below it there is a grid which displays the data.
+
+So when I am searching any text in search bar it filters it out shows only that row which matches with it.
+
+Now issue is that this a detailed row group means there is expander of some rows and in this expansion there is crds code and crds name and also in some row group expansion there is another expansion called as other nle
+
+So when I search any crds code or name in the search bar then it filters out properly but the row is not expanding automatically we have to expand it if the search text is present in row group and also expand other nle if there is a crds code matching 
+
+So issue is that row expansion is not working properly when searching text and there should be no highlight come on searching that is working properly only work on row expansion.
+
+I have shared the code above let me know if you want any other codes
+
+
+
+It is working properly just one small issue is that 
+
+If I searched the crds code let's abc which is present in first row expansion and it also contains other nles section, so when I search abc then it should expand only first row not other nles section. Only fix this rest is working fine 
+
+
+
+I will explain the sceniro let's see row head name is test and in that it contains contains crds codes and uat and dev and other nle section also and in other nle section it has prod as crds code 
+
+So when I search prod then only it should expand other nle section otherwise not. And when I search uat/ dev then it should expand test row only and other nle section should not expand
+
+
+
 onGridRowDataUpdated(event?: any): void {
   this.syncRowExpansion();
 }
