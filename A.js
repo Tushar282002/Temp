@@ -1,3 +1,71 @@
+import {
+  IsExternalFilterPresent,
+  DoesExternalFilterPass,
+  IRowNode,
+} from 'ag-grid-community';
+
+isExternalFilterPresent: IsExternalFilterPresent = (): boolean => {
+  return (
+    (this.selectedStatuses?.length ?? 0) > 0 ||
+    (this.selectedClassifications?.length ?? 0) > 0 ||
+    !!this.productFilterCtrl.value?.length ||
+    !!this.filterText.value ||
+    !!this.currentSelectedTagsId?.length ||
+    this.clickedCardNumber() !== undefined
+  );
+};
+
+doesExternalFilterPass: DoesExternalFilterPass<IOpportunityModelBase> = (
+  node: IRowNode<IOpportunityModelBase>
+): boolean => {
+  const row = node.data;
+  if (!row) return true;
+
+  if (this.clickedCardNumber() !== undefined && !this.passesCardFilter(row)) return false;
+  if (!this.passesStatusFilter(row)) return false;
+  if (!this.passesClassificationFilter(row)) return false;
+  if (!this.passesProductFilter(row)) return false;
+  if (!this.passesSearchFilter(row)) return false;
+  if (!this.passesTagFilter(row)) return false;
+
+  return true;
+};
+
+
+private passesStatusFilter(row: IOpportunityModelBase): boolean {
+  if (this.wasAllStatusSelected() || this.selectedStatuses.length === 0) return true;
+
+  const stages = this.selectedStatuses.map(s => s.value.split(',')[0]?.trim());
+  const statuses = this.selectedStatuses
+    .map(s => s.value.split(',')[1]?.trim())
+    .filter(Boolean);
+
+  if (stages.length && (row.stage === undefined || !stages.includes(row.stage))) return false;
+
+  if (statuses.length) {
+    const isClosed = row.stage === getOpportunitySiebelStageTypeDescription(OpportunityStageType.Closed);
+    if (isClosed) return statuses.includes(row.status ?? '');
+  }
+  return true;
+  }
+
+
+private applyFilters(): void {
+  if (this.gridApi && !this.gridApi.isDestroyed()) {
+    this.gridApi.onFilterChanged();
+  }
+  this.SetupCardData();
+}
+
+[rowData]="rowData()"
+[isExternalFilterPresent]="isExternalFilterPresent"
+[doesExternalFilterPass]="doesExternalFilterPass"
+
+
+
+
+
+
 see I am working on clients module and in this module there is a search bar and below it there is a grid which displays the data.
 
 So when I am searching any text in search bar it filters it out shows only that row which matches with it.
