@@ -1,3 +1,64 @@
+private passesClassificationFilter(row: IOpportunityModelBase): boolean {
+  if (this.wasAllClassificationsSelected() || this.selectedClassifications.length === 0) return true;
+  if (row.classification === undefined) return false;
+  return this.selectedClassifications.findIndex(x => x.name === row.classification) !== -1;
+}
+
+private passesProductFilter(row: IOpportunityModelBase): boolean {
+  if (!this.productFilterCtrl.value?.length) return true;
+  if (row.productStrings === undefined) return false;
+  const products = this.productFilterCtrl.value.map(p => p.name) as string[];
+  return this.anyProductExists(products, row.productStrings.split(','), false);
+}
+
+private passesSearchFilter(row: IOpportunityModelBase): boolean {
+  const searchText = this.filterText.value;
+  if (!searchText) return true;
+  // Reuse your existing utility against a single-row array
+  return searchArrayObjectsProperties([row], searchText).length > 0;
+}
+
+private passesTagFilter(row: IOpportunityModelBase): boolean {
+  if (!this.currentSelectedTagsId?.length) return true;
+  const uniqueIdSet = new Set<string>(this.getAllUniqueIds());
+  return uniqueIdSet.has(row.opportunityId ?? '');
+}
+
+private passesCardFilter(row: IOpportunityModelBase): boolean {
+  const cardId = this.clickedCardNumber();
+  const closedStage = getOpportunitySiebelStageTypeDescription(OpportunityStageType.Closed);
+  switch (cardId) {
+    case 0:
+      return (row.classification === 'Premium' || row.classification === 'Innovative')
+        && row.stage === closedStage;
+    case 1: {
+      if (!row.expectedClosingDate) return false;
+      return new Date(row.expectedClosingDate).getTime() < Date.now()
+        && row.stage !== closedStage;
+    }
+    case 2: {
+      if (!row.lastUpdatedDate) return false;
+      const diffMs = 91.25 * 24 * 60 * 60 * 1000;
+      const age = Date.now() - new Date(row.lastUpdatedDate).getTime();
+      return age > diffMs && row.stage !== closedStage;
+    }
+    case 3:
+      return row.status === OpportunityStatusType.OnHold;
+    case 4:
+      return row.status === OpportunityStatusType.Won;
+    case 5:
+      return row.status === OpportunityStatusType.Lost
+        || row.status === OpportunityStatusType.ClientCancelled
+        || row.status === OpportunityStatusType.BnppPass;
+    default:
+      return true;
+  }
+}
+
+
+
+
+
 import {
   IsExternalFilterPresent,
   DoesExternalFilterPass,
