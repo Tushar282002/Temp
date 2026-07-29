@@ -1,3 +1,18 @@
+applyGridFilter(fieldName: string, values: string[]) {
+  this.gridApi.setColumnFilterModel(fieldName, {
+    filterType: 'multi',
+    filterModels: [
+      null, // leave the text filter (index 0) untouched/inactive
+      { filterType: 'set', values }, // set filter is index 1
+    ],
+  }).then(() => {
+    this.gridApi.onFilterChanged();
+  });
+}
+
+
+
+
 // Pre-populate stage/status from navigation state
 const stage = pref[CustomPreferenceKeys.stage];
 const opportunityStatuses = pref[CustomPreferenceKeys.opportunityStatuses];
