@@ -1,3 +1,30 @@
+if (this.gridApi) {
+  const currentModel = this.gridApi.getColumnFilterModel('status') as {
+    filterType?: string;
+    filterModels?: Array<{ filterType?: string; values?: string[] } | null>;
+  } | null;
+
+  const setModel = currentModel?.filterModels?.[1];
+  const staleValues: string[] = setModel?.values ?? [];
+
+  const availableStatuses = new Set(this.rowData().map(r => r.status).filter(Boolean));
+  const isStale = staleValues.length > 0 && !staleValues.some(v => availableStatuses.has(v));
+
+  const clearIfStale = isStale
+    ? this.gridApi.setColumnFilterModel('status', { filterType: 'multi', filterModels: [null, null] })
+    : Promise.resolve();
+
+  clearIfStale.then(() => {
+    if (this.pendingColumnFilter) {
+      this.applyGridFilter(this.pendingColumnFilter.field, [this.pendingColumnFilter.value]);
+    } else {
+      this.gridApi.onFilterChanged();
+    }
+  });
+}
+
+
+
 forkJoin([...]).subscribe(([currentYear, previousYear]) => {
   this.rowData.set(currentYear);
   this.pastRowData.set(previousYear);
