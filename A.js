@@ -1,3 +1,40 @@
+private applyGridPreferences(): void {
+  if (!this.gridApi) return;
+  // ... existing column-def logic unchanged ...
+
+  // Restore filter state — but skip if navigation state is about to set its own filter
+  if (!this.pendingColumnFilter && !this.skipRestoreGridFilters) {
+    this.gridApi.setFilterModel(this.gridFilters);
+  }
+}
+
+
+onGridReady(params: any) {
+  this.gridApi = params.api;
+  this.applyGridPreferences();
+  this.addButtons();
+
+  if (this.pendingColumnFilter) {
+    this.applyGridFilter(this.pendingColumnFilter.field, [this.pendingColumnFilter.value]);
+  } else {
+    // No pending column filter from navigation — make sure the grid doesn't carry over a stale one
+    this.gridApi.setColumnFilterModel('status', { filterType: 'multi', filterModels: [null, null] }).then(() => {
+      this.gridApi.onFilterChanged();
+    });
+  }
+}
+
+
+private clearPendingColumnFilter(): void {
+  this.pendingColumnFilter = undefined;
+  this.gridFilters = null;   // add this — stop it from being reapplied later
+  if (this.gridApi) {
+    this.gridApi.setColumnFilterModel('status', { filterType: 'multi', filterModels: [null, null] }).then(() => {
+      this.gridApi.onFilterChanged();
+    });
+  }
+}
+
 private prePopulateStageStatusDropdowns(stage: string, statusList: unknown): void {
   const itemsToSelect: FilterItem[] = [];
 
