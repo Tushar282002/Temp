@@ -1,13 +1,20 @@
 private setGridState() {
   if (this.gridState && this.setFromGridState) {
-    if (this.pendingColumnFilter || this.skipRestoreGridFilters) {
-      // Navigation-driven filter takes precedence — strip the stale filter model
-      // from the saved grid state before restoring the rest (columns, sort, grouping)
-      const { filter, ...stateWithoutFilter } = this.gridState as any;
-      this.gridApi?.setState(stateWithoutFilter);
+    const navigationDrivingStatus = !!this.pendingColumnFilter || this.skipRestoreGridFilters;
+
+    if (navigationDrivingStatus) {
+      const stateToApply: any = { ...this.gridState };
+      if (stateToApply.filter?.filterModel?.status) {
+        stateToApply.filter = {
+          ...stateToApply.filter,
+          filterModel: { ...stateToApply.filter.filterModel, status: undefined },
+        };
+      }
+      this.gridApi?.setState(stateToApply);
     } else {
       this.gridApi?.setState(this.gridState);
     }
+
     this.setFromGridState = false;
   }
 }
@@ -15,56 +22,9 @@ private setGridState() {
 
 
 
-if (this.gridApi) {
-  const currentModel = this.gridApi.getColumnFilterModel('status') as {
-    filterType?: string;
-    filterModels?: Array<{ filterType?: string; values?: string[] } | null>;
-  } | null;
-
-  const setModel = currentModel?.filterModels?.[1];
-  const staleValues: string[] = setModel?.values ?? [];
-
-  const availableStatuses = new Set(this.rowData().map(r => r.status).filter(Boolean));
-  const isStale = staleValues.length > 0 && !staleValues.some(v => availableStatuses.has(v));
-
-  const clearIfStale = isStale
-    ? this.gridApi.setColumnFilterModel('status', { filterType: 'multi', filterModels: [null, null] })
-    : Promise.resolve();
-
-  clearIfStale.then(() => {
-    if (this.pendingColumnFilter) {
-      this.applyGridFilter(this.pendingColumnFilter.field, [this.pendingColumnFilter.value]);
-    } else {
-      this.gridApi.onFilterChanged();
-    }
-  });
-}
 
 
-
-forkJoin([...]).subscribe(([currentYear, previousYear]) => {
-  this.rowData.set(currentYear);
-  this.pastRowData.set(previousYear);
-  this.applyFilters();
-  this.applyCardFilter();
-  this.RemoveIsBusy();
-
-  if (this.gridApi) {
-    const currentModel = this.gridApi.getColumnFilterModel('status');
-    const setModel = currentModel?.filterModels?.[1];
-    const staleValues: string[] = setModel?.values ?? [];
-
-    const availableStatuses = new Set(this.rowData().map(r => r.status).filter(Boolean));
-    const isStale = staleValues.length > 0 && !staleValues.some(v => availableStatuses.has(v));
-
-    const clearIfStale = isStale
-      ? this.gridApi.setColumnFilterModel('status', { filterType: 'multi', filterModels: [null, null] })
-      : Promise.resolve();
-
-    clearIfStale.then(() => {
-      if (this.pendingColumnFilter) {
-        this.applyGridFilter(this.pendingColumnFilter.field, [this.pendingColumnFilter.value]);
-      } else {
+} else {
         this.gridApi.onFilterChanged();
       }
     });
