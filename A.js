@@ -1,3 +1,20 @@
+private setGridState() {
+  if (this.gridState && this.setFromGridState) {
+    if (this.pendingColumnFilter || this.skipRestoreGridFilters) {
+      // Navigation-driven filter takes precedence — strip the stale filter model
+      // from the saved grid state before restoring the rest (columns, sort, grouping)
+      const { filter, ...stateWithoutFilter } = this.gridState as any;
+      this.gridApi?.setState(stateWithoutFilter);
+    } else {
+      this.gridApi?.setState(this.gridState);
+    }
+    this.setFromGridState = false;
+  }
+}
+
+
+
+
 if (this.gridApi) {
   const currentModel = this.gridApi.getColumnFilterModel('status') as {
     filterType?: string;
