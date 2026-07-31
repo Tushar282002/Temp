@@ -1,3 +1,81 @@
+} else if (stage || opportunityStatuses) {
+  this.clearPendingColumnFilter();
+  this.skipRestoreGridFilters = true;   // add this
+  this.prePopulateStageStatusDropdowns(stage, opportunityStatuses);
+}
+
+
+private applyGridPreferences(): void {
+  if (!this.gridApi) {
+    return;
+  }
+  const prefs: GridColumnPreference[] = this.gridPreferences ?? [];
+
+  // Fast lookup: field -> preference
+  const prefByField = new Map<string, GridColumnPreference>();
+  prefs.forEach((p) => prefByField.set(p.f, p));
+
+  // Col Pref ordered by their Index
+  const sortedPrefs = [...prefs].sort((a, b) => a.pI - b.pI);
+
+  // Build the ordered column list
+  const finalColDefs: ColDef[] = [];
+
+  // Columns that are in preferences (ordered by pI)
+  for (const matchedPref of sortedPrefs) {
+    const def = this.defaultColumnDefinitions.find((d) => d.field === matchedPref.f);
+    if (def) {
+      finalColDefs.push({
+        ...def,
+        hide: !matchedPref.v,
+        pinned: matchedPref.pin || matchedPref.locked,
+        width: matchedPref.w,
+        flex: matchedPref.w ? undefined : def.flex,
+        lockVisible: matchedPref.locked,
+        lockPosition: matchedPref.locked ? 'left' : undefined,
+        lockPinned: matchedPref.locked,
+        suppressMovable: matchedPref.locked,
+        suppressNavigable: matchedPref.locked,
+        rowGroup: matchedPref.rowGroup,
+        rowGroupIndex: matchedPref.rowGroup ? matchedPref.rowGroupIndex : undefined,
+      });
+    } else {
+      console.info(`[${this.moduleKey}] setupColDefs Preference for unknown field '${matchedPref.f}'`);
+    }
+  }
+
+  // All default columns that were not part of preferences
+  const remainingDefs = this.defaultColumnDefinitions.filter(
+    (d) => d.field !== undefined && !prefByField.has(d.field),
+  );
+  finalColDefs.push(...remainingDefs);
+
+  // Apply the column definitions to the grid
+  this.colDefs = finalColDefs;
+  this.gridApi.setGridOption('columnDefs', this.colDefs);
+
+  prefs.forEach((pref) => {
+    // Apply visibility and pinned states
+    this.gridApi.setColumnsVisible([pref.f], pref.v);
+    this.gridApi.setColumnsPinned([pref.f], pref.pin);
+  });
+
+  // Apply Grouping
+  const grouped = prefs.filter((c) => c.rowGroup);
+  if (grouped.length) {
+    const groupedFields = grouped.map((g) => g.f);
+    this.gridApi.setRowGroupColumns(groupedFields);
+  }
+
+  // Restore filter state — but skip if navigation state is about to set its own filter
+  if (!this.pendingColumnFilter && !this.skipRestoreGridFilters) {
+    this.gridApi.setFilterModel(this.gridFilters);
+  }
+}
+
+
+
+
 private applyGridPreferences(): void {
   if (!this.gridApi) return;
   // ... existing column-def logic unchanged ...
