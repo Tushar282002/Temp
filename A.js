@@ -1,3 +1,11 @@
+Bhumi is a Software Developer with around 2 years of experience in Java, Spring Boot, and SQL. She has worked on enterprise applications in the financial domain, building and maintaining scalable solutions while resolving production issues. She is a quick learner, has strong problem-solving skills, and takes ownership of her work. I believe she would be a great fit for BNP Paribas because of her technical expertise, collaborative approach, and eagerness to learn.
+
+bhumigada10@gmail.com
+
+
+
+
+
 private setGridState() {
   if (this.gridState && this.setFromGridState) {
     const navigationDrivingStatus = !!this.pendingColumnFilter || this.skipRestoreGridFilters;
