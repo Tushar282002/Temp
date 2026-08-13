@@ -2,6 +2,28 @@ Bhumi is a Software Developer with around 2 years of experience in Java, Spring 
 
 bhumigada10@gmail.com
 
+  console.info(`[${this.moduleKey}] finalColDefs rowGroup check`,
+  finalColDefs.filter(d => d.field === 'contacts' || d.field === 'clientName' || d.field === 'priority' || d.field === 'description')
+    .map(d => ({ field: d.field, rowGroup: d.rowGroup, rowGroupIndex: d.rowGroupIndex }))
+);
+this.colDefs = finalColDefs;
+this.gridApi.setGridOption('columnDefs', this.colDefs);
+
+console.info(`[${this.moduleKey}] state right after setGridOption`,
+  this.gridApi.getColumnState().filter(c => c.rowGroup).map(c => ({ colId: c.colId, rowGroupIndex: c.rowGroupIndex }))
+);
+const grouped = prefs.filter((c) => c.rowGroup);
+console.info(`[${this.moduleKey}] grouped prefs before setRowGroupColumns`, grouped.map(g => ({ f: g.f, rowGroupIndex: g.rowGroupIndex })));
+if (grouped.length) {
+  const groupedFields = grouped.map((g) => g.f);
+  this.gridApi.setRowGroupColumns(groupedFields);
+}
+
+this.gridApi.setFilterModel(this.gridFilters);
+console.info(`[${this.moduleKey}] FINAL state at end of applyGridPreferences`,
+  this.gridApi.getColumnState().filter(c => c.rowGroup).map(c => ({ colId: c.colId, rowGroupIndex: c.rowGroupIndex }))
+);
+
 
 
 
