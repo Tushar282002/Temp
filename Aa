@@ -1,3 +1,16 @@
+
+Your Solution
+
+Upload the .py, .java and .md files that make up your solution. The Al reads the whole bundle and generates 20 questions (15 MCQ and 5 descriptive) focused on your submission, with a 20-minute limit.
+
+Upload Solution files
+
+Upload your.py, .java and.md files - business logic, orchestrator, agent, database, and prompt files. Include a MANIFEST.md listing your agent/orchestration logic, tool definitions, and persistence code; and a short written rationale (=half a page) covering your key decisions, how you resolved anything underspecified above, any places you questioned or corrected something an Al assistant suggested, and what you'd do with more time.
+
+Select files
+
+
+
 Build a Python application called "Office Supplies Wholesale Order Fulfillment Agent" — 
 an agentic system that autonomously processes B2B bulk orders using an LLM-driven agent 
 with tool use, not a single-shot LLM call.
