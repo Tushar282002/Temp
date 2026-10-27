@@ -1,3 +1,14 @@
+Hi [Name],
+
+I am following up on the JSON required for Jira 1244, related to migrating the existing SOAP services to REST services.
+
+We are currently waiting for the JSON from the Siebel team to proceed further. Could you please share an update on its availability and let us know when we can expect it?
+
+Thanks for your support.
+
+Regards,
+Tushar
+
 Bhumi is a Software Developer with around 2 years of experience in Java, Spring Boot, and SQL. She has worked on enterprise applications in the financial domain, building and maintaining scalable solutions while resolving production issues. She is a quick learner, has strong problem-solving skills, and takes ownership of her work. I believe she would be a great fit for BNP Paribas because of her technical expertise, collaborative approach, and eagerness to learn.
 
 bhumigada10@gmail.com
